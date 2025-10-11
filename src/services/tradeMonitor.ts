@@ -22,15 +22,47 @@ const init = async () => {
 };
 
 const fetchTradeData = async () => {
+    const user_positions: UserPositionInterface[] = await fetchData(
+        `https://data-api.polymarket.com/positions?user=${USER_ADDRESS}`
+    );
+    const user_activities: UserActivityInterface[] = await fetchData(
+        `https://data-api.polymarket.com/activity?user=${USER_ADDRESS}&limit=100&offset=0`
+    );
 
+    await UserPosition.deleteMany({});
+    await UserPosition.insertMany(user_positions);
+
+    try {
+        const new_trades = user_activities
+            .filter((activity: UserActivityInterface) => {
+                return !temp_trades.some(
+                    (existingActivity: UserActivityInterface) =>
+                        existingActivity.transactionHash === activity.transactionHash
+                );
+            })
+            .filter((activity: UserActivityInterface) => {
+                const currentTimestamp = Math.floor(moment().valueOf() / 1000);
+                return activity.timestamp + TOO_OLD_TIMESTAMP * 60 * 60 > currentTimestamp;
+            })
+            .map((activity: UserActivityInterface) => {
+                return { ...activity, bot: false, botExcutedTime: 0 };
+            })
+            .sort(
+                (a: { timestamp: number }, b: { timestamp: number }) => a.timestamp - b.timestamp
+            );
+        temp_trades = [...temp_trades, ...new_trades];
+        await UserActivity.insertMany(new_trades);
+    } catch (error) {
+        console.error('Error inserting new trades:', error);
+    }
 };
 
 const tradeMonitor = async () => {
     console.log('Trade Monitor is running every', FETCH_INTERVAL, 'seconds');
-    await init();    //Load my oders before sever downs
+    await init(); //Load my oders before sever downs
     while (true) {
-        await fetchTradeData();     //Fetch all user activities
-        await new Promise((resolve) => setTimeout(resolve, FETCH_INTERVAL * 1000));     //Fetch user activities every second
+        await fetchTradeData(); //Fetch all user activities
+        await new Promise((resolve) => setTimeout(resolve, FETCH_INTERVAL * 1000)); //Fetch user activities every second
     }
 };
 
