@@ -72,7 +72,8 @@ const postOrder = async (
         } else {
             await UserActivity.updateOne({ _id: trade._id }, { bot: true });
         }
-    } else if (condition === 'buy') {       //Buy strategy
+    } else if (condition === 'buy') {
+        //Buy strategy
         console.log('Buy Strategy...');
         const ratio = my_balance / (user_balance + trade.usdcSize);
         console.log('ratio', ratio);
@@ -129,7 +130,8 @@ const postOrder = async (
         } else {
             await UserActivity.updateOne({ _id: trade._id }, { bot: true });
         }
-    } else if (condition === 'sell') {          //Sell strategy
+    } else if (condition === 'sell') {
+        //Sell strategy
         console.log('Sell Strategy...');
         let remaining = 0;
         if (!my_position) {

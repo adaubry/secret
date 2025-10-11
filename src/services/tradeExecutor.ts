@@ -43,6 +43,47 @@ const doTrading = async (clobClient: ClobClient) => {
         const user_balance = await getMyBalance(USER_ADDRESS);
         console.log('My current balance:', my_balance);
         console.log('User current balance:', user_balance);
+        if (trade.side === 'BUY') {
+            if (user_position && my_position && my_position.asset !== trade.asset) {
+                await postOrder(
+                    clobClient,
+                    'merge',
+                    my_position,
+                    user_position,
+                    trade,
+                    my_balance,
+                    user_balance
+                );
+            } else {
+                await postOrder(
+                    clobClient,
+                    'buy',
+                    my_position,
+                    user_position,
+                    trade,
+                    my_balance,
+                    user_balance
+                );
+            }
+        } else if (trade.side === 'SELL') {
+            await postOrder(
+                clobClient,
+                'sell',
+                my_position,
+                user_position,
+                trade,
+                my_balance,
+                user_balance
+            );
+        } else {
+            console.log('Not supported trade type');
+
+            await UserActivity.updateOne(
+                { _id: trade._id },
+
+                { bot: true, botExcutedTime: trade.botExcutedTime + 1 }
+            );
+        }
     }
 };
 
