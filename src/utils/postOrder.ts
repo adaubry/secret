@@ -7,14 +7,22 @@ const RETRY_LIMIT = ENV.RETRY_LIMIT;
 const USER_ADDRESS = ENV.USER_ADDRESS;
 const UserActivity = getUserActivityModel(USER_ADDRESS);
 
-// --- Helper to normalize decimals ---
-const round = (num: number, decimals: number) => Math.floor(num * 10 ** decimals) / 10 ** decimals;
+// --- Round a number down to N decimals ---
+const roundDown = (num: number, decimals: number) =>
+    Math.floor(num * 10 ** decimals) / 10 ** decimals;
 
-// Wrap both maker/taker normalization
-const normalizeOrder = (size: number, price: number) => {
-    const normalizedPrice = round(price, 4); // price max 4 decimals
-    const normalizedSize = round(size, 4); // token size max 4 decimals
-    const makerAmount = round(size * price, 2); // USDC / maker max 2 decimals
+// --- Normalize order price and size for Polymarket ---
+const normalizeOrder = (size: number, price: number, tickSize: number) => {
+    // Snap price to nearest tick
+    let normalizedPrice = Math.max(
+        tickSize,
+        Math.min(1 - tickSize, Math.ceil(price / tickSize) * tickSize)
+    );
+    normalizedPrice = roundDown(normalizedPrice, 4); // max 4 decimals for price
+
+    const normalizedSize = roundDown(size, 4); // max 4 decimals for token size
+    const makerAmount = roundDown(normalizedSize * normalizedPrice, 2); // USDC makerAmount max 2 decimals
+
     return { normalizedSize, normalizedPrice, makerAmount };
 };
 
@@ -60,7 +68,8 @@ const postOrder = async (
 
             const { normalizedSize, normalizedPrice } = normalizeOrder(
                 sellSize,
-                parseFloat(maxPriceBid.price)
+                parseFloat(maxPriceBid.price),
+                0.01
             );
 
             const order_args = {
@@ -142,8 +151,7 @@ const postOrder = async (
 
             // For BUY limit orders: use size (tokens) and price
             const buySize = buyAmount / askPrice;
-
-            const { normalizedSize, normalizedPrice } = normalizeOrder(buySize, askPrice);
+            const { normalizedSize, normalizedPrice } = normalizeOrder(buySize, askPrice, 0.01);
 
             const order_args = {
                 side: Side.BUY,
@@ -219,7 +227,8 @@ const postOrder = async (
             // normalize sell amount and price
             const { normalizedSize, normalizedPrice } = normalizeOrder(
                 sellSize,
-                parseFloat(maxPriceBid.price)
+                parseFloat(maxPriceBid.price),
+                0.01
             );
 
             const order_args = {
