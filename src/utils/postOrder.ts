@@ -112,8 +112,8 @@ const postOrder = async (
 
             // For BUY orders:
             // - size is in outcome tokens (what you're buying)
-            // - makerAmount = size * price (USDC to spend)
-            // - takerAmount = size (tokens to receive)
+            // - makerAmount = size * price (USDC to spend) - max 2 decimals
+            // - takerAmount = size (tokens to receive) - max 5 decimals
             const maxSizeAvailable = parseFloat(minPriceAsk.size);
             const pricePerToken = parseFloat(minPriceAsk.price);
             const maxUSDCForAsk = maxSizeAvailable * pricePerToken;
@@ -127,11 +127,15 @@ const postOrder = async (
                 buySize = maxSizeAvailable;
             }
 
+            // Round to required precision: size (5 decimals), price (2 decimals)
+            const roundedSize = Math.floor(buySize * 100000) / 100000; // 5 decimals
+            const roundedPrice = Math.floor(pricePerToken * 100) / 100; // 2 decimals
+
             const order_args = {
                 tokenID: trade.asset,
-                price: pricePerToken,
+                price: roundedPrice,
                 side: Side.BUY,
-                size: buySize,
+                size: roundedSize,
                 feeRateBps: 0,
             };
 
