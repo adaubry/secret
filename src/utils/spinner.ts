@@ -1,14 +1,14 @@
 import { createSpinner } from 'nanospinner';
 
 const frames = [
-    '▰▱▱▱▱▱▱',
-    '▰▰▱▱▱▱▱',
-    '▰▰▰▱▱▱▱',
-    '▰▰▰▰▱▱▱',
-    '▰▰▰▰▰▱▱',
-    '▰▰▰▰▰▰▱',
-    '▰▰▰▰▰▰▰',
-    '▱▱▱▱▱▱▱',
+    'o------\n',
+    'oo-----\n',
+    'ooo----\n',
+    'oooo---\n',
+    'ooowo--\n',
+    'oooooo-\n',
+    'ooooooo\n',
+    '-------\n',
 ];
 
 let spinnerInstance: ReturnType<typeof createSpinner> | null = null;

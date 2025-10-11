@@ -58,6 +58,7 @@ const postOrder = async (
             console.log('Order args:', order_arges);
             const signedOrder = await clobClient.createMarketOrder(order_arges);
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
+
             if (resp.success === true) {
                 retry = 0;
                 console.log('Successfully posted MERGE order:', resp);
