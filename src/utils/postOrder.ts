@@ -224,7 +224,7 @@ const postOrder = async (
 
             const order_args = {
                 side: Side.SELL,
-                tokenID: my_position.asset,
+                tokenID: trade.asset,
                 size: normalizedSize,
                 price: normalizedPrice,
                 feeRateBps: 0,
