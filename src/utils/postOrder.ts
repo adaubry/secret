@@ -47,18 +47,20 @@ const postOrder = async (
                 sellSize = parseFloat(maxPriceBid.size);
             }
 
-            // For SELL: amount is in USDC (what you receive)
-            const sellAmount = sellSize * parseFloat(maxPriceBid.price);
-
+            // For SELL limit orders: use size (tokens) and price
             const order_args = {
                 side: Side.SELL,
                 tokenID: my_position.asset,
-                amount: sellAmount,
+                size: sellSize,
                 price: parseFloat(maxPriceBid.price),
+                feeRateBps: 0,
             };
 
             console.log('MERGE Order args:', order_args);
-            const signedOrder = await clobClient.createMarketOrder(order_args);
+            const signedOrder = await clobClient.createOrder(order_args, {
+                tickSize: '0.001',
+                negRisk: false,
+            });
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
 
             if (resp.success === true) {
@@ -124,16 +126,22 @@ const postOrder = async (
 
             console.log('Placing BUY order - amount (USDC):', buyAmount, 'price:', askPrice);
 
-            // For BUY: amount is in USDC (what you spend)
+            // For BUY limit orders: use size (tokens) and price
+            const buySize = buyAmount / askPrice;
+
             const order_args = {
                 side: Side.BUY,
                 tokenID: trade.asset,
-                amount: buyAmount,
+                size: buySize,
                 price: askPrice,
+                feeRateBps: 0,
             };
 
             console.log('BUY Order args:', order_args);
-            const signedOrder = await clobClient.createMarketOrder(order_args);
+            const signedOrder = await clobClient.createOrder(order_args, {
+                tickSize: '0.001',
+                negRisk: false,
+            });
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
 
             if (resp.success === true) {
@@ -192,18 +200,20 @@ const postOrder = async (
                 sellSize = parseFloat(maxPriceBid.size);
             }
 
-            // For SELL: amount is in USDC (what you receive)
-            const sellAmount = sellSize * parseFloat(maxPriceBid.price);
-
+            // For SELL limit orders: use size (tokens) and price
             const order_args = {
                 side: Side.SELL,
                 tokenID: trade.asset,
-                amount: sellAmount,
+                size: sellSize,
                 price: parseFloat(maxPriceBid.price),
+                feeRateBps: 0,
             };
 
             console.log('SELL Order args:', order_args);
-            const signedOrder = await clobClient.createMarketOrder(order_args);
+            const signedOrder = await clobClient.createOrder(order_args, {
+                tickSize: '0.001',
+                negRisk: false,
+            });
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
 
             if (resp.success === true) {
