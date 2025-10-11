@@ -58,7 +58,7 @@ const postOrder = async (
 
             console.log('MERGE Order args:', order_args);
             const signedOrder = await clobClient.createOrder(order_args, {
-                tickSize: '0.001',
+                tickSize: '0.01',
                 negRisk: false,
             });
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
@@ -139,7 +139,7 @@ const postOrder = async (
 
             console.log('BUY Order args:', order_args);
             const signedOrder = await clobClient.createOrder(order_args, {
-                tickSize: '0.001',
+                tickSize: '0.01',
                 negRisk: false,
             });
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
@@ -211,7 +211,7 @@ const postOrder = async (
 
             console.log('SELL Order args:', order_args);
             const signedOrder = await clobClient.createOrder(order_args, {
-                tickSize: '0.001',
+                tickSize: '0.01',
                 negRisk: false,
             });
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
