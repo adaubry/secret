@@ -60,7 +60,11 @@ const postOrder = async (
             };
 
             console.log('Order args:', order_args);
-            const signedOrder = await clobClient.createOrder(order_args);
+            // TODO: Get tickSize and negRisk from market data
+            const signedOrder = await clobClient.createOrder(order_args, {
+                tickSize: '0.001',
+                negRisk: false,
+            });
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
 
             if (resp.success === true) {
@@ -140,7 +144,11 @@ const postOrder = async (
             };
 
             console.log('Order args:', order_args);
-            const signedOrder = await clobClient.createOrder(order_args);
+            // TODO: Get tickSize and negRisk from market data
+            const signedOrder = await clobClient.createOrder(order_args, {
+                tickSize: '0.001',
+                negRisk: false,
+            });
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
 
             if (resp.success === true) {
