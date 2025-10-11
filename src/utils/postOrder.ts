@@ -77,7 +77,14 @@ const postOrder = async (
         console.log('Buy Strategy...');
         const ratio = my_balance / (user_balance + trade.usdcSize);
         console.log('ratio', ratio);
-        let remaining = trade.usdcSize * ratio;
+        let remaining: number;
+        if (ratio > 1) {
+            remaining = trade.usdcSize * 1;
+            console.log('ratio > 1 thus ratio is set to 1');
+        } else {
+            remaining = trade.usdcSize * ratio;
+        }
+
         let retry = 0;
         while (remaining > 0 && retry < RETRY_LIMIT) {
             const orderBook = await clobClient.getOrderBook(trade.asset);
@@ -141,8 +148,14 @@ const postOrder = async (
             remaining = my_position.size;
         } else {
             const ratio = trade.size / (user_position.size + trade.size);
-            console.log('ratio', ratio);
-            remaining = my_position.size * ratio;
+            let remaining: number;
+            if (ratio > 1) {
+                remaining = trade.usdcSize * 1;
+                console.log('ratio > 1 thus ratio is set to 1');
+            } else {
+                console.log('ratio', ratio);
+                remaining = trade.usdcSize * ratio;
+            }
         }
         let retry = 0;
         while (remaining > 0 && retry < RETRY_LIMIT) {
