@@ -39,31 +39,34 @@ const postOrder = async (
             }, orderBook.bids[0]);
 
             console.log('Max price bid:', maxPriceBid);
-            let order_arges;
-            let sellAmount: number;
 
+            let sellSize: number;
             if (remaining <= parseFloat(maxPriceBid.size)) {
-                sellAmount = remaining;
+                sellSize = remaining;
             } else {
-                sellAmount = parseFloat(maxPriceBid.size);
+                sellSize = parseFloat(maxPriceBid.size);
             }
 
-            // For SELL: makerAmount = tokens to sell, takerAmount = USDC to receive
-            order_arges = {
-                side: Side.SELL,
+            // For SELL orders:
+            // - size is in outcome tokens (what you're selling)
+            // - makerAmount = size (tokens to sell)
+            // - takerAmount = size * price (USDC to receive)
+            const order_args = {
                 tokenID: my_position.asset,
-                makerAmount: sellAmount.toString(),
-                takerAmount: (sellAmount * parseFloat(maxPriceBid.price)).toString(),
+                price: parseFloat(maxPriceBid.price),
+                side: Side.SELL,
+                size: sellSize,
+                feeRateBps: 0,
             };
 
-            console.log('Order args:', order_arges);
-            const signedOrder = await clobClient.createOrder(order_arges);
+            console.log('Order args:', order_args);
+            const signedOrder = await clobClient.createOrder(order_args);
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
 
             if (resp.success === true) {
                 retry = 0;
                 console.log('Successfully posted MERGE order:', resp);
-                remaining -= sellAmount;
+                remaining -= sellSize;
             } else {
                 retry += 1;
                 console.log('Error posting MERGE order: retrying...', resp);
@@ -79,16 +82,16 @@ const postOrder = async (
         console.log('Buy Strategy...');
         const ratio = my_balance / (user_balance + trade.usdcSize);
         console.log('ratio', ratio);
-        let remaining: number;
+        let remainingUSDC: number;
         if (ratio > 1) {
-            remaining = trade.usdcSize * 2;
+            remainingUSDC = trade.usdcSize * 2;
             console.log('ratio > 1 thus ratio is set to 2');
         } else {
-            remaining = trade.usdcSize * ratio;
+            remainingUSDC = trade.usdcSize * ratio;
         }
 
         let retry = 0;
-        while (remaining > 0 && retry < RETRY_LIMIT) {
+        while (remainingUSDC > 0 && retry < RETRY_LIMIT) {
             const orderBook = await clobClient.getOrderBook(trade.asset);
             if (!orderBook.asks || orderBook.asks.length === 0) {
                 console.log('No asks found');
@@ -107,32 +110,39 @@ const postOrder = async (
                 break;
             }
 
-            let order_arges;
-            let usdcToSpend: number;
-            const maxUsdcForAsk = parseFloat(minPriceAsk.size) * parseFloat(minPriceAsk.price);
+            // For BUY orders:
+            // - size is in outcome tokens (what you're buying)
+            // - makerAmount = size * price (USDC to spend)
+            // - takerAmount = size (tokens to receive)
+            const maxSizeAvailable = parseFloat(minPriceAsk.size);
+            const pricePerToken = parseFloat(minPriceAsk.price);
+            const maxUSDCForAsk = maxSizeAvailable * pricePerToken;
 
-            if (remaining <= maxUsdcForAsk) {
-                usdcToSpend = remaining;
+            let buySize: number;
+            if (remainingUSDC <= maxUSDCForAsk) {
+                // We can spend all remaining USDC
+                buySize = remainingUSDC / pricePerToken;
             } else {
-                usdcToSpend = maxUsdcForAsk;
+                // We can only buy what's available
+                buySize = maxSizeAvailable;
             }
 
-            // For BUY: makerAmount = USDC to spend, takerAmount = tokens to receive
-            order_arges = {
-                side: Side.BUY,
+            const order_args = {
                 tokenID: trade.asset,
-                makerAmount: usdcToSpend.toString(),
-                takerAmount: (usdcToSpend / parseFloat(minPriceAsk.price)).toString(),
+                price: pricePerToken,
+                side: Side.BUY,
+                size: buySize,
+                feeRateBps: 0,
             };
 
-            console.log('Order args:', order_arges);
-            const signedOrder = await clobClient.createOrder(order_arges);
+            console.log('Order args:', order_args);
+            const signedOrder = await clobClient.createOrder(order_args);
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
 
             if (resp.success === true) {
                 retry = 0;
                 console.log('Successfully posted BUY order:', resp);
-                remaining -= usdcToSpend;
+                remainingUSDC -= buySize * pricePerToken;
             } else {
                 retry += 1;
                 console.log('Error posting BUY order: retrying...', resp);
@@ -146,25 +156,25 @@ const postOrder = async (
     } else if (condition === 'sell') {
         //Sell strategy
         console.log('Sell Strategy...');
-        let remaining = 0;
+        let remainingTokens = 0;
         if (!my_position) {
             console.log('No position to sell');
             await UserActivity.updateOne({ _id: trade._id }, { bot: true });
         } else if (!user_position) {
-            remaining = my_position.size;
+            remainingTokens = my_position.size;
         } else {
             const ratio = trade.size / (user_position.size + trade.size);
             if (ratio > 1) {
-                remaining = my_position.size * 2;
+                remainingTokens = my_position.size * 2;
                 console.log('ratio > 1 thus ratio is set to 2');
             } else {
                 console.log('ratio', ratio);
-                remaining = my_position.size * ratio;
+                remainingTokens = my_position.size * ratio;
             }
         }
 
         let retry = 0;
-        while (remaining > 0 && retry < RETRY_LIMIT) {
+        while (remainingTokens > 0 && retry < RETRY_LIMIT) {
             const orderBook = await clobClient.getOrderBook(trade.asset);
             if (!orderBook.bids || orderBook.bids.length === 0) {
                 await UserActivity.updateOne({ _id: trade._id }, { bot: true });
@@ -177,31 +187,34 @@ const postOrder = async (
             }, orderBook.bids[0]);
 
             console.log('Max price bid:', maxPriceBid);
-            let order_arges;
-            let sellAmount: number;
 
-            if (remaining <= parseFloat(maxPriceBid.size)) {
-                sellAmount = remaining;
+            let sellSize: number;
+            if (remainingTokens <= parseFloat(maxPriceBid.size)) {
+                sellSize = remainingTokens;
             } else {
-                sellAmount = parseFloat(maxPriceBid.size);
+                sellSize = parseFloat(maxPriceBid.size);
             }
 
-            // For SELL: makerAmount = tokens to sell, takerAmount = USDC to receive
-            order_arges = {
-                side: Side.SELL,
+            // For SELL orders:
+            // - size is in outcome tokens (what you're selling)
+            // - makerAmount = size (tokens to sell)
+            // - takerAmount = size * price (USDC to receive)
+            const order_args = {
                 tokenID: trade.asset,
-                makerAmount: sellAmount.toString(),
-                takerAmount: (sellAmount * parseFloat(maxPriceBid.price)).toString(),
+                price: parseFloat(maxPriceBid.price),
+                side: Side.SELL,
+                size: sellSize,
+                feeRateBps: 0,
             };
 
-            console.log('Order args:', order_arges);
-            const signedOrder = await clobClient.createOrder(order_arges);
+            console.log('Order args:', order_args);
+            const signedOrder = await clobClient.createOrder(order_args);
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
 
             if (resp.success === true) {
                 retry = 0;
                 console.log('Successfully posted order:', resp);
-                remaining -= sellAmount;
+                remainingTokens -= sellSize;
             } else {
                 retry += 1;
                 console.log('Error posting order: retrying...', resp);
