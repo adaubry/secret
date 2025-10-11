@@ -122,6 +122,8 @@ const postOrder = async (
             // - takerAmount = size (tokens to receive) - max 5 decimals
             const maxSizeAvailable = parseFloat(minPriceAsk.size);
             const pricePerToken = parseFloat(minPriceAsk.price);
+            console.log('debug - maxSizeAvailable:', maxSizeAvailable);
+            console.log('debug - pricePerToken:', pricePerToken);
 
             // Safety check: ensure price is valid
             if (pricePerToken <= 0 || isNaN(pricePerToken)) {
@@ -154,6 +156,10 @@ const postOrder = async (
             };
 
             console.log('Order args:', order_args);
+
+            console.log('Debug - buySize:', buySize);
+            console.log('Debug - pricePerToken:', pricePerToken);
+
             // TODO: Get tickSize and negRisk from market data
             const signedOrder = await clobClient.createOrder(order_args, {
                 tickSize: '0.001',
