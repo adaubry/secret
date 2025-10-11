@@ -47,24 +47,18 @@ const postOrder = async (
                 sellSize = parseFloat(maxPriceBid.size);
             }
 
-            // For SELL orders:
-            // - size is in outcome tokens (what you're selling)
-            // - makerAmount = size (tokens to sell)
-            // - takerAmount = size * price (USDC to receive)
+            // For SELL: amount is in USDC (what you receive)
+            const sellAmount = sellSize * parseFloat(maxPriceBid.price);
+
             const order_args = {
-                tokenID: my_position.asset,
-                price: parseFloat(maxPriceBid.price),
                 side: Side.SELL,
-                size: sellSize,
-                feeRateBps: 0,
+                tokenID: my_position.asset,
+                amount: sellAmount,
+                price: parseFloat(maxPriceBid.price),
             };
 
-            console.log('Order args:', order_args);
-            // TODO: Get tickSize and negRisk from market data
-            const signedOrder = await clobClient.createOrder(order_args, {
-                tickSize: '0.001',
-                negRisk: false,
-            });
+            console.log('MERGE Order args:', order_args);
+            const signedOrder = await clobClient.createMarketOrder(order_args);
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
 
             if (resp.success === true) {
@@ -108,63 +102,44 @@ const postOrder = async (
             }, orderBook.asks[0]);
 
             console.log('Min price ask:', minPriceAsk);
-            console.log('Min price ask price:', parseFloat(minPriceAsk.price));
 
-            if (parseFloat(minPriceAsk.price) - 0.05 > trade.price) {
+            const askPrice = parseFloat(minPriceAsk.price);
+            if (askPrice - 0.05 > trade.price) {
                 console.log('Too big different price - do not copy');
                 await UserActivity.updateOne({ _id: trade._id }, { bot: true });
                 break;
             }
 
-            // For BUY orders:
-            // - size is in outcome tokens (what you're buying)
-            // - makerAmount = size * price (USDC to spend) - max 2 decimals
-            // - takerAmount = size (tokens to receive) - max 5 decimals
             const maxSizeAvailable = parseFloat(minPriceAsk.size);
-            const pricePerToken = parseFloat(minPriceAsk.price);
+            const maxUSDCForAsk = maxSizeAvailable * askPrice;
 
-            // Safety check: ensure price is valid
-            if (pricePerToken <= 0 || isNaN(pricePerToken)) {
-                console.log('Invalid price detected:', pricePerToken);
-                await UserActivity.updateOne({ _id: trade._id }, { bot: true });
-                break;
-            }
-
-            const maxUSDCForAsk = maxSizeAvailable * pricePerToken;
-
-            let buySize: number;
+            let buyAmount: number;
             if (remainingUSDC <= maxUSDCForAsk) {
                 // We can spend all remaining USDC
-                buySize = remainingUSDC / pricePerToken;
+                buyAmount = remainingUSDC;
             } else {
                 // We can only buy what's available
-                buySize = maxSizeAvailable;
+                buyAmount = maxUSDCForAsk;
             }
 
-            // Round to required precision: size (5 decimals), price (2 decimals)
-            const roundedSize = Math.floor(buySize * 100000) / 100000; // 5 decimals
-            const roundedPrice = Math.floor(pricePerToken * 100) / 100; // 2 decimals
+            console.log('Placing BUY order - amount (USDC):', buyAmount, 'price:', askPrice);
 
+            // For BUY: amount is in USDC (what you spend)
             const order_args = {
-                tokenID: trade.asset,
-                price: roundedPrice,
                 side: Side.BUY,
-                size: roundedSize,
-                feeRateBps: 0,
+                tokenID: trade.asset,
+                amount: buyAmount,
+                price: askPrice,
             };
 
-            console.log('Order args:', order_args);
-            // TODO: Get tickSize and negRisk from market data
-            const signedOrder = await clobClient.createOrder(order_args, {
-                tickSize: '0.001',
-                negRisk: false,
-            });
+            console.log('BUY Order args:', order_args);
+            const signedOrder = await clobClient.createMarketOrder(order_args);
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
 
             if (resp.success === true) {
                 retry = 0;
                 console.log('Successfully posted BUY order:', resp);
-                remainingUSDC -= buySize * pricePerToken;
+                remainingUSDC -= buyAmount;
             } else {
                 retry += 1;
                 console.log('Error posting BUY order: retrying...', resp);
@@ -217,20 +192,18 @@ const postOrder = async (
                 sellSize = parseFloat(maxPriceBid.size);
             }
 
-            // For SELL orders:
-            // - size is in outcome tokens (what you're selling)
-            // - makerAmount = size (tokens to sell)
-            // - takerAmount = size * price (USDC to receive)
+            // For SELL: amount is in USDC (what you receive)
+            const sellAmount = sellSize * parseFloat(maxPriceBid.price);
+
             const order_args = {
-                tokenID: trade.asset,
-                price: parseFloat(maxPriceBid.price),
                 side: Side.SELL,
-                size: sellSize,
-                feeRateBps: 0,
+                tokenID: trade.asset,
+                amount: sellAmount,
+                price: parseFloat(maxPriceBid.price),
             };
 
-            console.log('Order args:', order_args);
-            const signedOrder = await clobClient.createOrder(order_args);
+            console.log('SELL Order args:', order_args);
+            const signedOrder = await clobClient.createMarketOrder(order_args);
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
 
             if (resp.success === true) {
