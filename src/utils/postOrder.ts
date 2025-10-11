@@ -20,7 +20,7 @@ const normalizeOrder = (size: number, price: number, tickSize: number) => {
     );
     normalizedPrice = roundDown(normalizedPrice, 2); // max 4 decimals for price
 
-    const normalizedSize = roundDown(size, 2); // max 4 decimals for token size
+    const normalizedSize = roundDown(size, 4); // max 4 decimals for token size
     const makerAmount = roundDown(normalizedSize * normalizedPrice, 2); // USDC makerAmount max 2 decimals
 
     return { normalizedSize, normalizedPrice, makerAmount };
@@ -35,9 +35,14 @@ const postOrder = async (
     my_balance: number,
     user_balance: number
 ) => {
+    const marketInfo = await clobClient.getMarket(trade.asset);
+    const tickSize = parseFloat(marketInfo?.tickSize || '0.01');
+    const minSize = parseFloat(marketInfo?.min_order_size || '0.01'); // minimum token amount
+
     //Merge strategy
     if (condition === 'merge') {
         console.log('Merging Strategy...');
+
         if (!my_position) {
             console.log('my_position is undefined');
             await UserActivity.updateOne({ _id: trade._id }, { bot: true });
@@ -59,7 +64,11 @@ const postOrder = async (
 
             console.log('Max price bid:', maxPriceBid);
 
-            let sellSize: number;
+            let sellSize = 0; //boilerplate
+            if (sellSize < minSize) {
+                console.log(`⚠️ Order size ${sellSize} below market minimum ${minSize}, adjusting`);
+                sellSize = minSize;
+            }
             if (remaining <= parseFloat(maxPriceBid.size)) {
                 sellSize = remaining;
             } else {
@@ -138,7 +147,13 @@ const postOrder = async (
             const maxSizeAvailable = parseFloat(minPriceAsk.size);
             const maxUSDCForAsk = maxSizeAvailable * askPrice;
 
-            let buyAmount: number;
+            let buyAmount = 0; //boilerplate
+            if (buyAmount < minSize) {
+                console.log(
+                    `⚠️ Order size ${buyAmount} below market minimum ${minSize}, adjusting`
+                );
+                buyAmount = minSize;
+            }
             if (remainingUSDC <= maxUSDCForAsk) {
                 // We can spend all remaining USDC
                 buyAmount = remainingUSDC;
@@ -217,7 +232,11 @@ const postOrder = async (
 
             console.log('Max price bid:', maxPriceBid);
 
-            let sellSize: number;
+            let sellSize = 0; //boilerplate
+            if (sellSize < minSize) {
+                console.log(`⚠️ Order size ${sellSize} below market minimum ${minSize}, adjusting`);
+                sellSize = minSize;
+            }
             if (remainingTokens <= parseFloat(maxPriceBid.size)) {
                 sellSize = remainingTokens;
             } else {
