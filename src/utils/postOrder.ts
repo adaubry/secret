@@ -56,15 +56,8 @@ const postOrder = async (
                 };
             }
             console.log('Order args:', order_arges);
-            //const signedOrder = await clobClient.createMarketOrder(order_arges);
-            //const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
-
-            const resp = {
-                success: true,
-                message:
-                    'This is a mock MERGE STRATEGY response. Uncomment the two lines above to enable actual trading.',
-            };
-
+            const signedOrder = await clobClient.createMarketOrder(order_arges);
+            const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
             if (resp.success === true) {
                 retry = 0;
                 console.log('Successfully posted MERGE order:', resp);
@@ -121,13 +114,8 @@ const postOrder = async (
                 };
             }
             console.log('Order args:', order_arges);
-            //const signedOrder = await clobClient.createMarketOrder(order_arges);
-            //const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
-            const resp = {
-                success: true,
-                message:
-                    'This is a mock BUY STRATEGY response. Uncomment the two lines above to enable actual trading.',
-            };
+            const signedOrder = await clobClient.createMarketOrder(order_arges);
+            const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
             if (resp.success === true) {
                 retry = 0;
                 console.log('Successfully posted BUY order:', resp);
@@ -187,15 +175,8 @@ const postOrder = async (
                 };
             }
             console.log('Order args:', order_arges);
-            //const signedOrder = await clobClient.createMarketOrder(order_arges);
-            //const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
-
-            const resp = {
-                success: true,
-                message:
-                    'This is a mock SELL STRATEGY response. Uncomment the two lines above to enable actual trading.',
-            };
-
+            const signedOrder = await clobClient.createMarketOrder(order_arges);
+            const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
             if (resp.success === true) {
                 retry = 0;
                 console.log('Successfully posted order:', resp);
