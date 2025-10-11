@@ -2,7 +2,6 @@ import { ethers } from 'ethers';
 import { ClobClient } from '@polymarket/clob-client';
 import { SignatureType } from '@polymarket/order-utils';
 import { ENV } from '../config/env';
-import spinner from '../utils/spinner';
 
 const PROXY_WALLET = ENV.PROXY_WALLET;
 const PRIVATE_KEY = ENV.PRIVATE_KEY;
@@ -26,28 +25,10 @@ const createClobClient = async (): Promise<ClobClient> => {
     let creds = await clobClient.createApiKey();
     console.error = originalConsoleError;
     if (creds.key) {
-        console.log(
-            'API Key created',
-            creds.key,
-            '\n',
-            'secret:',
-            spinner.start(44),
-            '\n',
-            'passphrase: ',
-            spinner.start(64)
-        );
+        console.log('API Key created', creds);
     } else {
         creds = await clobClient.deriveApiKey();
-        console.log(
-            'API Key derived',
-            creds.key,
-            '\n',
-            'secret:',
-            spinner.start(44),
-            '\n',
-            'passphrase: ',
-            spinner.start(64)
-        );
+        console.log('API Key derived', creds);
     }
 
     clobClient = new ClobClient(

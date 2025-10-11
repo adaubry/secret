@@ -97,7 +97,7 @@ const tradeExcutor = async (clobClient: ClobClient) => {
             spinner.stop();
             await doTrading(clobClient);
         } else {
-            spinner.start(200);
+            spinner.start('Waiting for new transactions');
         }
     }
 };
