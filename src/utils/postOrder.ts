@@ -18,9 +18,9 @@ const normalizeOrder = (size: number, price: number, tickSize: number) => {
         tickSize,
         Math.min(1 - tickSize, Math.ceil(price / tickSize) * tickSize)
     );
-    normalizedPrice = roundDown(normalizedPrice, 4); // max 4 decimals for price
+    normalizedPrice = roundDown(normalizedPrice, 2); // max 4 decimals for price
 
-    const normalizedSize = roundDown(size, 4); // max 4 decimals for token size
+    const normalizedSize = roundDown(size, 2); // max 4 decimals for token size
     const makerAmount = roundDown(normalizedSize * normalizedPrice, 2); // USDC makerAmount max 2 decimals
 
     return { normalizedSize, normalizedPrice, makerAmount };
