@@ -1,12 +1,11 @@
-const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*';
-const width = process.stdout.columns || 80;
-const height = 10; // number of lines to show
+const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZoverwriteleftovecharactersfromp0123456789@#$%^&*';
 
 let matrixInterval: NodeJS.Timeout | null = null;
+let lastLength = 0;
 
 interface Spinner {
     start: (length: number) => void;
-    stop: (text?: string) => void;
+    stop: () => void;
 }
 
 const spinner: Spinner = {
@@ -18,8 +17,13 @@ const spinner: Spinner = {
             for (let i = 0; i < length; i++) {
                 line += characters[Math.floor(Math.random() * characters.length)];
             }
-            process.stdout.write('\r' + line);
-        }, 100); // update every 100ms
+
+            // Add spaces to overwrite leftover characters from previous frame
+            const padding = ' '.repeat(Math.max(0, lastLength - line.length));
+            process.stdout.write('\r' + line + padding);
+
+            lastLength = line.length;
+        }, 15); // update every 15ms
     },
 
     stop: () => {
@@ -27,7 +31,9 @@ const spinner: Spinner = {
             clearInterval(matrixInterval);
             matrixInterval = null;
         }
-        process.stdout.write('\r'); // clear spinner line
+        // Clear the line completely when stopping
+        process.stdout.write('\r' + ' '.repeat(lastLength) + '\r');
+        lastLength = 0;
     },
 };
 
