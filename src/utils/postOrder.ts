@@ -108,6 +108,8 @@ const postOrder = async (
             }, orderBook.asks[0]);
 
             console.log('Min price ask:', minPriceAsk);
+            console.log('Min price ask price:', parseFloat(minPriceAsk.price));
+
             if (parseFloat(minPriceAsk.price) - 0.05 > trade.price) {
                 console.log('Too big different price - do not copy');
                 await UserActivity.updateOne({ _id: trade._id }, { bot: true });
@@ -120,6 +122,14 @@ const postOrder = async (
             // - takerAmount = size (tokens to receive) - max 5 decimals
             const maxSizeAvailable = parseFloat(minPriceAsk.size);
             const pricePerToken = parseFloat(minPriceAsk.price);
+
+            // Safety check: ensure price is valid
+            if (pricePerToken <= 0 || isNaN(pricePerToken)) {
+                console.log('Invalid price detected:', pricePerToken);
+                await UserActivity.updateOne({ _id: trade._id }, { bot: true });
+                break;
+            }
+
             const maxUSDCForAsk = maxSizeAvailable * pricePerToken;
 
             let buySize: number;
