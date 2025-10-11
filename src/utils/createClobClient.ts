@@ -12,7 +12,7 @@ const createClobClient = async (): Promise<ClobClient> => {
     //const host = CLOB_HTTP_URL as string;  --- DEBUG ---
     const host = 'https://clob.polymarket.com';
     const wallet = new Wallet(PRIVATE_KEY as string);
-    const clobClient = new ClobClient(
+     let clobClient = new ClobClient(
         host,
         chainId,
         wallet

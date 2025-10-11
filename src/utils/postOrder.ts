@@ -80,8 +80,8 @@ const postOrder = async (
         console.log('ratio', ratio);
         let remaining: number;
         if (ratio > 1) {
-            remaining = trade.usdcSize * 1;
-            console.log('ratio > 1 thus ratio is set to 1');
+            remaining = trade.usdcSize * 2;
+            console.log('ratio > 1 thus ratio is set to 2');
         } else {
             remaining = trade.usdcSize * ratio;
         }
@@ -151,8 +151,8 @@ const postOrder = async (
             const ratio = trade.size / (user_position.size + trade.size);
             let remaining: number;
             if (ratio > 1) {
-                remaining = trade.usdcSize * 1;
-                console.log('ratio > 1 thus ratio is set to 1');
+                remaining = trade.usdcSize * 2;
+                console.log('ratio > 1 thus ratio is set to 2');
             } else {
                 console.log('ratio', ratio);
                 remaining = trade.usdcSize * ratio;
@@ -197,7 +197,7 @@ const postOrder = async (
                 remaining -= order_arges.amount;
             } else {
                 retry += 1;
-                console.log('Error posting order: retrying...', resp);
+g               console.log('Error posting order: retrying...', resp);
             }
         }
         if (retry >= RETRY_LIMIT) {
