@@ -1,16 +1,8 @@
-const frames: string[] = [
-    '▰▱▱▱▱▱▱',
-    '▰▰▱▱▱▱▱',
-    '▰▰▰▱▱▱▱',
-    '▰▰▰▰▱▱▱',
-    '▰▰▰▰▰▱▱',
-    '▰▰▰▰▰▰▱',
-    '▰▰▰▰▰▰▰',
-    '▱▱▱▱▱▱▱',
-];
+const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*';
+const width = process.stdout.columns || 80;
+const height = 10; // number of lines to show
 
-let i = 0;
-let spinnerInterval: NodeJS.Timeout | null = null;
+let matrixInterval: NodeJS.Timeout | null = null;
 
 interface Spinner {
     start: (text?: string) => void;
@@ -19,19 +11,33 @@ interface Spinner {
 
 const spinner: Spinner = {
     start: (text = '') => {
-        process.stdout.write(text + ' ');
-        spinnerInterval = setInterval(() => {
-            process.stdout.write('\r' + text + ' ' + frames[i]);
-            i = (i + 1) % frames.length;
-        }, 200);
+        const lines: string[] = Array(height).fill(' '.repeat(width));
+
+        matrixInterval = setInterval(() => {
+            // Shift lines down
+            lines.pop();
+            let newLine = '';
+            for (let i = 0; i < width; i++) {
+                newLine +=
+                    Math.random() < 0.1
+                        ? characters[Math.floor(Math.random() * characters.length)]
+                        : ' ';
+            }
+            lines.unshift(newLine);
+
+            // Move cursor up and print
+            process.stdout.write(text + '\x1b[H'); // move cursor to top-left
+            process.stdout.write(lines.join('\n'));
+        }, 100); // update every 100ms
     },
 
     stop: (text = '') => {
-        if (spinnerInterval) {
-            clearInterval(spinnerInterval);
-            spinnerInterval = null;
+        if (matrixInterval) {
+            clearInterval(matrixInterval);
+            matrixInterval = null;
         }
-        process.stdout.write('\r' + text + '\n');
+        process.stdout.write('\x1b[0m' + test); // reset colors
+        process.stdout.write('\n'); // move to next line
     },
 };
 
