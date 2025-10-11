@@ -7,6 +7,17 @@ const RETRY_LIMIT = ENV.RETRY_LIMIT;
 const USER_ADDRESS = ENV.USER_ADDRESS;
 const UserActivity = getUserActivityModel(USER_ADDRESS);
 
+// --- Helper to normalize decimals ---
+const round = (num: number, decimals: number) => Math.floor(num * 10 ** decimals) / 10 ** decimals;
+
+// Wrap both maker/taker normalization
+const normalizeOrder = (size: number, price: number) => {
+    const normalizedPrice = round(price, 4); // price max 4 decimals
+    const normalizedSize = round(size, 4); // token size max 4 decimals
+    const makerAmount = round(size * price, 2); // USDC / maker max 2 decimals
+    return { normalizedSize, normalizedPrice, makerAmount };
+};
+
 const postOrder = async (
     clobClient: ClobClient,
     condition: string,
@@ -47,15 +58,18 @@ const postOrder = async (
                 sellSize = parseFloat(maxPriceBid.size);
             }
 
-            // For SELL limit orders: use size (tokens) and price
+            const { normalizedSize, normalizedPrice } = normalizeOrder(
+                sellSize,
+                parseFloat(maxPriceBid.price)
+            );
+
             const order_args = {
                 side: Side.SELL,
                 tokenID: my_position.asset,
-                size: sellSize,
-                price: parseFloat(maxPriceBid.price),
+                size: normalizedSize,
+                price: normalizedPrice,
                 feeRateBps: 0,
             };
-
             console.log('MERGE Order args:', order_args);
             const signedOrder = await clobClient.createOrder(order_args, {
                 tickSize: '0.01',
@@ -129,15 +143,17 @@ const postOrder = async (
             // For BUY limit orders: use size (tokens) and price
             const buySize = buyAmount / askPrice;
 
+            const { normalizedSize, normalizedPrice } = normalizeOrder(buySize, askPrice);
+
             const order_args = {
                 side: Side.BUY,
                 tokenID: trade.asset,
-                size: buySize,
-                price: askPrice,
+                size: normalizedSize,
+                price: normalizedPrice,
                 feeRateBps: 0,
             };
 
-            console.log('BUY Order args:', order_args);
+            console.log('BUY Order args (normalized):', order_args);
             const signedOrder = await clobClient.createOrder(order_args, {
                 tickSize: '0.01',
                 negRisk: false,
@@ -200,12 +216,17 @@ const postOrder = async (
                 sellSize = parseFloat(maxPriceBid.size);
             }
 
-            // For SELL limit orders: use size (tokens) and price
+            // normalize sell amount and price
+            const { normalizedSize, normalizedPrice } = normalizeOrder(
+                sellSize,
+                parseFloat(maxPriceBid.price)
+            );
+
             const order_args = {
                 side: Side.SELL,
-                tokenID: trade.asset,
-                size: sellSize,
-                price: parseFloat(maxPriceBid.price),
+                tokenID: my_position.asset,
+                size: normalizedSize,
+                price: normalizedPrice,
                 feeRateBps: 0,
             };
 
