@@ -55,14 +55,13 @@ const normalizeOrder = (size: number, price: number, tickSize: number) => {
     console.log(
         `  Final - in 6-decimals: makerAmount=${Math.round(finalMakerAmountRounded * 1000000)}, takerAmount=${Math.round(normalizedSize * 1000000)}`
     );
-
     // Verify the 6-decimal conversion meets requirements
     const makerAmount6Dec = Math.round(finalMakerAmountRounded * 1000000);
     const takerAmount6Dec = Math.round(normalizedSize * 1000000);
     console.log(`  Verification: makerAmount % 10000 = ${makerAmount6Dec % 10000} (must be 0)`);
     console.log(`  Verification: takerAmount % 10 = ${takerAmount6Dec % 10} (must be 0)`);
 
-    return { normalizedSize, normalizedPrice };
+    return { normalizedSize, normalizedPrice, finalMakerAmountRounded };
 };
 
 const postOrder = async (
@@ -119,11 +118,13 @@ const postOrder = async (
                 sellSize = minSize;
             }
 
-            const { normalizedSize, normalizedPrice } = normalizeOrder(
+            let { normalizedSize, normalizedPrice, finalMakerAmountRounded } = normalizeOrder(
                 sellSize,
                 parseFloat(maxPriceBid.price),
                 tickSize
             );
+
+            normalizedSize = +(finalMakerAmountRounded / normalizedPrice).toFixed(5);
 
             const order_args = {
                 side: Side.SELL,
@@ -205,7 +206,13 @@ const postOrder = async (
             // For BUY limit orders: use size (tokens) and price
             const buySize = buyAmount / askPrice;
 
-            const { normalizedSize, normalizedPrice } = normalizeOrder(buySize, askPrice, tickSize);
+            let { normalizedSize, normalizedPrice, finalMakerAmountRounded } = normalizeOrder(
+                buySize,
+                askPrice,
+                tickSize
+            );
+
+            normalizedSize = +(finalMakerAmountRounded / normalizedPrice).toFixed(5);
 
             console.log('🔍 After normalization:');
             console.log(`   normalizedSize: ${normalizedSize}`);
@@ -294,11 +301,13 @@ const postOrder = async (
             }
 
             // normalize sell amount and price
-            const { normalizedSize, normalizedPrice } = normalizeOrder(
+            let { normalizedSize, normalizedPrice, finalMakerAmountRounded } = normalizeOrder(
                 sellSize,
                 parseFloat(maxPriceBid.price),
                 tickSize
             );
+
+            normalizedSize = +(finalMakerAmountRounded / normalizedPrice).toFixed(5);
 
             const order_args = {
                 side: Side.SELL,
