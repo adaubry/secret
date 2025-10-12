@@ -125,6 +125,9 @@ const postOrder = async (
             );
 
             normalizedSize = +(finalMakerAmountRounded / normalizedPrice).toFixed(5);
+            const oneMinute = parseInt(
+                ((new Date().getTime() + 60 * 1000 + 10 * 1000) / 1000).toString()
+            );
 
             const order_args = {
                 side: Side.SELL,
@@ -132,13 +135,14 @@ const postOrder = async (
                 size: normalizedSize,
                 price: normalizedPrice,
                 feeRateBps: 0,
+                expiration: oneMinute,
             };
             console.log('MERGE Order args:', order_args);
             const signedOrder = await clobClient.createOrder(order_args, {
                 tickSize: marketInfo.tickSize,
                 negRisk: negRisk,
             });
-            const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
+            const resp = await clobClient.postOrder(signedOrder, OrderType.GTD);
 
             if (resp.success === true) {
                 retry = 0;
@@ -223,13 +227,16 @@ const postOrder = async (
             console.log(
                 `   Expected in 6-decimals: ${Math.round(normalizedSize * normalizedPrice * 1000000)}`
             );
-
+            const oneMinute = parseInt(
+                ((new Date().getTime() + 60 * 1000 + 10 * 1000) / 1000).toString()
+            );
             const order_args = {
                 side: Side.BUY,
                 tokenID: trade.asset,
                 size: normalizedSize,
                 price: normalizedPrice,
                 feeRateBps: 0,
+                expiration: oneMinute,
             };
 
             console.log('BUY Order args (normalized):', order_args);
@@ -237,7 +244,7 @@ const postOrder = async (
                 tickSize: marketInfo.tickSize,
                 negRisk: negRisk,
             });
-            const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
+            const resp = await clobClient.postOrder(signedOrder, OrderType.GTD);
 
             if (resp.success === true) {
                 retry = 0;
@@ -308,13 +315,16 @@ const postOrder = async (
             );
 
             normalizedSize = +(finalMakerAmountRounded / normalizedPrice).toFixed(5);
-
+            const oneMinute = parseInt(
+                ((new Date().getTime() + 60 * 1000 + 10 * 1000) / 1000).toString()
+            );
             const order_args = {
                 side: Side.SELL,
                 tokenID: trade.asset,
                 size: normalizedSize,
                 price: normalizedPrice,
                 feeRateBps: 0,
+                expiration: oneMinute,
             };
 
             console.log('SELL Order args:', order_args);
@@ -322,7 +332,7 @@ const postOrder = async (
                 tickSize: marketInfo.tickSize,
                 negRisk: negRisk,
             });
-            const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
+            const resp = await clobClient.postOrder(signedOrder, OrderType.GTD);
 
             if (resp.success === true) {
                 retry = 0;
@@ -344,4 +354,3 @@ const postOrder = async (
 };
 
 export default postOrder;
-
