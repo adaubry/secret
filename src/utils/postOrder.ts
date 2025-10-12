@@ -27,6 +27,7 @@ const normalizeOrder = (size: number, price: number, tickSize: number) => {
 
     // Step 3: Calculate makerAmount (size * price) and ensure it has max 2 decimals
     const rawMakerAmount = normalizedSize * normalizedPrice;
+    console.log(`  rawMakerAmount (size * price): ${rawMakerAmount}`);
     const roundedMakerAmount = roundDown(rawMakerAmount, 2);
 
     // Step 4: CRITICAL FIX - Back-calculate size to ensure size * price = exactly 2 decimals
