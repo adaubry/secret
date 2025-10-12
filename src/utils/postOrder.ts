@@ -74,7 +74,7 @@ const postOrder = async (
     user_balance: number
 ) => {
     // Fetch market info once for all strategies
-    const marketInfo = await clobClient.getMarket(trade.asset);
+    const marketInfo = await clobClient.getMarket(trade.conditionId);
     const tickSize = parseFloat(marketInfo?.tickSize || '0.01');
     const minSize = parseFloat(marketInfo?.min_order_size || '0.01');
 
