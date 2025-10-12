@@ -12,18 +12,47 @@ const roundDown = (num: number, decimals: number) =>
     Math.floor(num * 10 ** decimals) / 10 ** decimals;
 
 // --- Normalize order price and size for Polymarket ---
+// Polymarket uses 6 decimals internally for amounts
+// But API requires: makerAmount max 2 decimals, takerAmount max 5 decimals
+// This means after 6-decimal conversion:
+// - USDC amounts must be divisible by 10000 (2 decimals in human format)
+// - Token amounts must be divisible by 10 (5 decimals in human format)
 const normalizeOrder = (size: number, price: number, tickSize: number) => {
-    // Snap price to nearest tick
+    // Snap price to nearest tick and round to 2 decimals (USDC precision)
     let normalizedPrice = Math.max(
         tickSize,
-        Math.min(1 - tickSize, Math.ceil(price / tickSize) * tickSize)
+        Math.min(1 - tickSize, Math.round(price / tickSize) * tickSize)
     );
-    normalizedPrice = roundDown(normalizedPrice, 2); // max 4 decimals for price
+    normalizedPrice = roundDown(normalizedPrice, 2);
 
-    const normalizedSize = roundDown(size, 4); // max 4 decimals for token size
-    const makerAmount = roundDown(normalizedSize * normalizedPrice, 2); // USDC makerAmount max 2 decimals
+    // Round size to 5 decimals (token precision for takerAmount)
+    let normalizedSize = roundDown(size, 5);
 
-    return { normalizedSize, normalizedPrice, makerAmount };
+    // Calculate what makerAmount will be (size * price for BUY, size for SELL)
+    // For BUY: makerAmount is USDC, needs 2 decimal precision
+    // We need to ensure size * price rounds to 2 decimals
+    const potentialMakerAmount = normalizedSize * normalizedPrice;
+    const roundedMakerAmount = roundDown(potentialMakerAmount, 2);
+
+    // CRITICAL FIX: Adjust size so that size * price equals our rounded maker amount
+    if (normalizedPrice > 0) {
+        normalizedSize = roundDown(roundedMakerAmount / normalizedPrice, 5);
+    }
+
+    console.log(`---- debug info (normalizeOrder) -----`);
+    console.log(`  Input: size=${size}, price=${price}`);
+    console.log(`  Output: size=${normalizedSize}, price=${normalizedPrice}`);
+    console.log(`  MakerAmount (size*price): ${normalizedSize * normalizedPrice}`);
+    console.log(
+        `  Validation: size*price has ${
+            (normalizedSize * normalizedPrice)
+                .toFixed(10)
+                .replace(/\.?0+$/, '')
+                .split('.')[1]?.length || 0
+        } decimals`
+    );
+
+    return { normalizedSize, normalizedPrice };
 };
 
 const postOrder = async (
@@ -35,9 +64,12 @@ const postOrder = async (
     my_balance: number,
     user_balance: number
 ) => {
+    // Fetch market info once for all strategies
     const marketInfo = await clobClient.getMarket(trade.asset);
     const tickSize = parseFloat(marketInfo?.tickSize || '0.01');
-    const minSize = parseFloat(marketInfo?.min_order_size || '0.01'); // minimum token amount
+    const minSize = parseFloat(marketInfo?.min_order_size || '0.01');
+
+    console.log(`Market Info - tickSize: ${tickSize}, minSize: ${minSize}`);
 
     //Merge strategy
     if (condition === 'merge') {
@@ -64,21 +96,22 @@ const postOrder = async (
 
             console.log('Max price bid:', maxPriceBid);
 
-            let sellSize = 0; //boilerplate
-            if (sellSize < minSize) {
-                console.log(`⚠️ Order size ${sellSize} below market minimum ${minSize}, adjusting`);
-                sellSize = minSize;
-            }
+            let sellSize: number;
             if (remaining <= parseFloat(maxPriceBid.size)) {
                 sellSize = remaining;
             } else {
                 sellSize = parseFloat(maxPriceBid.size);
             }
 
+            if (sellSize < minSize) {
+                console.log(`⚠️ Order size ${sellSize} below market minimum ${minSize}, adjusting`);
+                sellSize = minSize;
+            }
+
             const { normalizedSize, normalizedPrice } = normalizeOrder(
                 sellSize,
                 parseFloat(maxPriceBid.price),
-                0.01
+                tickSize
             );
 
             const order_args = {
@@ -90,7 +123,7 @@ const postOrder = async (
             };
             console.log('MERGE Order args:', order_args);
             const signedOrder = await clobClient.createOrder(order_args, {
-                tickSize: '0.01',
+                tickSize: tickSize.toString(),
                 negRisk: false,
             });
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
@@ -147,13 +180,7 @@ const postOrder = async (
             const maxSizeAvailable = parseFloat(minPriceAsk.size);
             const maxUSDCForAsk = maxSizeAvailable * askPrice;
 
-            let buyAmount = 0; //boilerplate
-            if (buyAmount < minSize) {
-                console.log(
-                    `⚠️ Order size ${buyAmount} below market minimum ${minSize}, adjusting`
-                );
-                buyAmount = minSize;
-            }
+            let buyAmount: number;
             if (remainingUSDC <= maxUSDCForAsk) {
                 // We can spend all remaining USDC
                 buyAmount = remainingUSDC;
@@ -166,7 +193,8 @@ const postOrder = async (
 
             // For BUY limit orders: use size (tokens) and price
             const buySize = buyAmount / askPrice;
-            const { normalizedSize, normalizedPrice } = normalizeOrder(buySize, askPrice, 0.01);
+
+            const { normalizedSize, normalizedPrice } = normalizeOrder(buySize, askPrice, tickSize);
 
             const order_args = {
                 side: Side.BUY,
@@ -178,7 +206,7 @@ const postOrder = async (
 
             console.log('BUY Order args (normalized):', order_args);
             const signedOrder = await clobClient.createOrder(order_args, {
-                tickSize: '0.01',
+                tickSize: tickSize.toString(),
                 negRisk: false,
             });
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
@@ -232,22 +260,23 @@ const postOrder = async (
 
             console.log('Max price bid:', maxPriceBid);
 
-            let sellSize = 0; //boilerplate
-            if (sellSize < minSize) {
-                console.log(`⚠️ Order size ${sellSize} below market minimum ${minSize}, adjusting`);
-                sellSize = minSize;
-            }
+            let sellSize: number;
             if (remainingTokens <= parseFloat(maxPriceBid.size)) {
                 sellSize = remainingTokens;
             } else {
                 sellSize = parseFloat(maxPriceBid.size);
             }
 
+            if (sellSize < minSize) {
+                console.log(`⚠️ Order size ${sellSize} below market minimum ${minSize}, adjusting`);
+                sellSize = minSize;
+            }
+
             // normalize sell amount and price
             const { normalizedSize, normalizedPrice } = normalizeOrder(
                 sellSize,
                 parseFloat(maxPriceBid.price),
-                0.01
+                tickSize
             );
 
             const order_args = {
@@ -260,7 +289,7 @@ const postOrder = async (
 
             console.log('SELL Order args:', order_args);
             const signedOrder = await clobClient.createOrder(order_args, {
-                tickSize: '0.01',
+                tickSize: tickSize.toString(),
                 negRisk: false,
             });
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
