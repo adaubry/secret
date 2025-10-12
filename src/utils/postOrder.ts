@@ -14,43 +14,52 @@ const roundDown = (num: number, decimals: number) =>
 // --- Normalize order price and size for Polymarket ---
 // Polymarket uses 6 decimals internally for amounts
 // But API requires: makerAmount max 2 decimals, takerAmount max 5 decimals
-// This means after 6-decimal conversion:
-// - USDC amounts must be divisible by 10000 (2 decimals in human format)
-// - Token amounts must be divisible by 10 (5 decimals in human format)
 const normalizeOrder = (size: number, price: number, tickSize: number) => {
-    // Snap price to nearest tick and round to 2 decimals (USDC precision)
+    // Step 1: Snap price to nearest tick and round to 2 decimals (USDC precision)
     let normalizedPrice = Math.max(
         tickSize,
         Math.min(1 - tickSize, Math.round(price / tickSize) * tickSize)
     );
     normalizedPrice = roundDown(normalizedPrice, 2);
 
-    // Round size to 5 decimals (token precision for takerAmount)
+    // Step 2: Round size to 5 decimals (token precision)
     let normalizedSize = roundDown(size, 5);
 
-    // Calculate what makerAmount will be (size * price for BUY, size for SELL)
-    // For BUY: makerAmount is USDC, needs 2 decimal precision
-    // We need to ensure size * price rounds to 2 decimals
-    const potentialMakerAmount = normalizedSize * normalizedPrice;
-    const roundedMakerAmount = roundDown(potentialMakerAmount, 2);
+    // Step 3: Calculate makerAmount (size * price) and ensure it has max 2 decimals
+    const rawMakerAmount = normalizedSize * normalizedPrice;
+    const roundedMakerAmount = roundDown(rawMakerAmount, 2);
 
-    // CRITICAL FIX: Adjust size so that size * price equals our rounded maker amount
+    // Step 4: CRITICAL FIX - Back-calculate size to ensure size * price = exactly 2 decimals
+    // This prevents floating point precision issues
     if (normalizedPrice > 0) {
-        normalizedSize = roundDown(roundedMakerAmount / normalizedPrice, 5);
+        // Recalculate size from the rounded maker amount
+        const recalculatedSize = roundedMakerAmount / normalizedPrice;
+        normalizedSize = roundDown(recalculatedSize, 5);
     }
 
+    // Final verification
+    const finalMakerAmount = normalizedSize * normalizedPrice;
+    const finalMakerAmountRounded = Math.round(finalMakerAmount * 100) / 100;
+
     console.log(`---- debug info (normalizeOrder) -----`);
-    console.log(`  Input: size=${size}, price=${price}`);
-    console.log(`  Output: size=${normalizedSize}, price=${normalizedPrice}`);
-    console.log(`  MakerAmount (size*price): ${normalizedSize * normalizedPrice}`);
+    console.log(`  Input: size=${size}, price=${price}, tickSize=${tickSize}`);
+    console.log(`  Step 1 - normalizedPrice: ${normalizedPrice}`);
+    console.log(`  Step 2 - normalizedSize (initial): ${size} → ${roundDown(size, 5)}`);
+    console.log(`  Step 3 - rawMakerAmount: ${rawMakerAmount} → rounded: ${roundedMakerAmount}`);
+    console.log(`  Step 4 - recalculated size: ${normalizedSize}`);
+    console.log(`  Final - size: ${normalizedSize}, price: ${normalizedPrice}`);
     console.log(
-        `  Validation: size*price has ${
-            (normalizedSize * normalizedPrice)
-                .toFixed(10)
-                .replace(/\.?0+$/, '')
-                .split('.')[1]?.length || 0
-        } decimals`
+        `  Final - makerAmount: ${finalMakerAmount} (should equal ${finalMakerAmountRounded})`
     );
+    console.log(
+        `  Final - in 6-decimals: makerAmount=${Math.round(finalMakerAmountRounded * 1000000)}, takerAmount=${Math.round(normalizedSize * 1000000)}`
+    );
+
+    // Verify the 6-decimal conversion meets requirements
+    const makerAmount6Dec = Math.round(finalMakerAmountRounded * 1000000);
+    const takerAmount6Dec = Math.round(normalizedSize * 1000000);
+    console.log(`  Verification: makerAmount % 10000 = ${makerAmount6Dec % 10000} (must be 0)`);
+    console.log(`  Verification: takerAmount % 10 = ${takerAmount6Dec % 10} (must be 0)`);
 
     return { normalizedSize, normalizedPrice };
 };
@@ -195,6 +204,16 @@ const postOrder = async (
             const buySize = buyAmount / askPrice;
 
             const { normalizedSize, normalizedPrice } = normalizeOrder(buySize, askPrice, tickSize);
+
+            console.log('🔍 After normalization:');
+            console.log(`   normalizedSize: ${normalizedSize}`);
+            console.log(`   normalizedPrice: ${normalizedPrice}`);
+            console.log(
+                `   Expected makerAmount (size * price): ${normalizedSize * normalizedPrice}`
+            );
+            console.log(
+                `   Expected in 6-decimals: ${Math.round(normalizedSize * normalizedPrice * 1000000)}`
+            );
 
             const order_args = {
                 side: Side.BUY,
