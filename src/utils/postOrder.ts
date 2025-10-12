@@ -74,11 +74,12 @@ const postOrder = async (
     user_balance: number
 ) => {
     // Fetch market info once for all strategies
-    const marketInfo = await clobClient.getMarket(trade.conditionId);
+    const marketInfo = await clobClient.getMarket(trade.asset);
     const tickSize = parseFloat(marketInfo?.tickSize || '0.01');
     const minSize = parseFloat(marketInfo?.min_order_size || '0.01');
+    const negRisk = marketInfo?.negRisk || false;
 
-    console.log(`Market Info - tickSize: ${tickSize}, minSize: ${minSize}`);
+    console.log(`Market Info - tickSize: ${tickSize}, minSize: ${minSize}, negRisk: ${negRisk}`);
 
     //Merge strategy
     if (condition === 'merge') {
@@ -132,8 +133,8 @@ const postOrder = async (
             };
             console.log('MERGE Order args:', order_args);
             const signedOrder = await clobClient.createOrder(order_args, {
-                tickSize: tickSize.toFixed(3) as any,
-                negRisk: false,
+                tickSize: marketInfo.tickSize,
+                negRisk: negRisk,
             });
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
 
@@ -225,8 +226,8 @@ const postOrder = async (
 
             console.log('BUY Order args (normalized):', order_args);
             const signedOrder = await clobClient.createOrder(order_args, {
-                tickSize: tickSize.toFixed(3) as any,
-                negRisk: false,
+                tickSize: marketInfo.tickSize,
+                negRisk: negRisk,
             });
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
 
@@ -308,8 +309,8 @@ const postOrder = async (
 
             console.log('SELL Order args:', order_args);
             const signedOrder = await clobClient.createOrder(order_args, {
-                tickSize: tickSize.toFixed(3) as any,
-                negRisk: false,
+                tickSize: marketInfo.tickSize,
+                negRisk: negRisk,
             });
             const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
 
