@@ -74,7 +74,7 @@ const postOrder = async (
     user_balance: number
 ) => {
     // Fetch market info once for all strategies
-    const marketInfo = await clobClient.getMarket(trade.);
+    const marketInfo = await clobClient.getMarket(trade.conditionId);
     const tickSize = parseFloat(marketInfo?.tickSize || '0.01');
     const minSize = parseFloat(marketInfo?.min_order_size || '0.01');
     const negRisk = marketInfo?.negRisk || false;
@@ -93,7 +93,7 @@ const postOrder = async (
         let remaining = my_position.size;
         let retry = 0;
         while (remaining > 0 && retry < RETRY_LIMIT) {
-            const orderBook = await clobClient.getOrderBook(trade.conditionId);
+            const orderBook = await clobClient.getOrderBook(trade.asset);
             if (!orderBook.bids || orderBook.bids.length === 0) {
                 console.log('No bids found');
                 await UserActivity.updateOne({ _id: trade._id }, { bot: true });
@@ -169,7 +169,7 @@ const postOrder = async (
 
         let retry = 0;
         while (remainingUSDC > 0 && retry < RETRY_LIMIT) {
-            const orderBook = await clobClient.getOrderBook(trade.conditionId);
+            const orderBook = await clobClient.getOrderBook(trade.asset);
             if (!orderBook.asks || orderBook.asks.length === 0) {
                 console.log('No asks found');
                 await UserActivity.updateOne({ _id: trade._id }, { bot: true });
@@ -275,7 +275,7 @@ const postOrder = async (
 
         let retry = 0;
         while (remainingTokens > 0 && retry < RETRY_LIMIT) {
-            const orderBook = await clobClient.getOrderBook(trade.conditionId);
+            const orderBook = await clobClient.getOrderBook(trade.asset);
             if (!orderBook.bids || orderBook.bids.length === 0) {
                 await UserActivity.updateOne({ _id: trade._id }, { bot: true });
                 console.log('No bids found');
