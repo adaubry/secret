@@ -36,9 +36,9 @@ const normalizeOrder = (size: number, price: number, tickSize: number) => {
         const recalculatedSize = roundedMakerAmount / normalizedPrice;
         normalizedSize = roundDown(recalculatedSize, 5);
     }
-
+    const recalculatedSize = roundedMakerAmount / normalizedPrice;
     // Final verification
-    const finalMakerAmount = normalizedSize * normalizedPrice;
+    const finalMakerAmount = recalculatedSize * normalizedPrice;
     const finalMakerAmountRounded = Math.round(finalMakerAmount * 100) / 100;
 
     console.log(`---- debug info (normalizeOrder) -----`);
