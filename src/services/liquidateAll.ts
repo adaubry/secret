@@ -73,7 +73,7 @@ const liquidateAll = async (clobClient: ClobClient) => {
                 console.log(`   💵 Expected USDC: ${(sellSize * sellPrice).toFixed(2)}`);
 
                 // Get market info for proper order creation
-                const marketInfo = await clobClient.getMarket(position.asset);
+                const marketInfo = await clobClient.getMarket(position.conditionId);
                 const negRisk = marketInfo?.negRisk || false;
 
                 // Create sell order at best bid price
@@ -94,8 +94,8 @@ const liquidateAll = async (clobClient: ClobClient) => {
                     }
                 );
 
-                // Post as GTD (Good Til Date) to maximize chance of execution
-                const resp = await clobClient.postOrder(signedOrder, OrderType.GTD);
+                // Post as GTC (Good Til Cancelled) to maximize chance of execution
+                const resp = await clobClient.postOrder(signedOrder, OrderType.GTC);
 
                 if (resp.success === true) {
                     console.log('   ✅ ORDER PLACED SUCCESSFULLY');
