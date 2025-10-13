@@ -27,7 +27,7 @@ const normalizeOrder = (size: number, price: number, tickSize: number) => {
 
     // Step 3: Calculate makerAmount (size * price) and ensure it has max 2 decimals
     const rawMakerAmount = normalizedSize * normalizedPrice;
-    console.log(`  rawMakerAmount (size * price): ${rawMakerAmount}`);
+    //console.log(`  rawMakerAmount (size * price): ${rawMakerAmount}`);
     const roundedMakerAmount = roundDown(rawMakerAmount, 2);
 
     // Step 4: CRITICAL FIX - Back-calculate size to ensure size * price = exactly 2 decimals
@@ -42,6 +42,7 @@ const normalizeOrder = (size: number, price: number, tickSize: number) => {
     const finalMakerAmount = recalculatedSize * normalizedPrice;
     const finalMakerAmountRounded = Math.round(finalMakerAmount * 100) / 100;
 
+    /*
     console.log(`---- debug info (normalizeOrder) -----`);
     console.log(`  Input: size=${size}, price=${price}, tickSize=${tickSize}`);
     console.log(`  Step 1 - normalizedPrice: ${normalizedPrice}`);
@@ -55,6 +56,8 @@ const normalizeOrder = (size: number, price: number, tickSize: number) => {
     console.log(
         `  Final - in 6-decimals: makerAmount=${Math.round(finalMakerAmountRounded * 1000000)}, takerAmount=${Math.round(normalizedSize * 1000000)}`
     );
+*/
+
     // Verify the 6-decimal conversion meets requirements
     const makerAmount6Dec = Math.round(finalMakerAmountRounded * 1000000);
     const takerAmount6Dec = Math.round(normalizedSize * 1000000);
@@ -129,19 +132,22 @@ const postOrder = async (
                 ((new Date().getTime() + 60 * 1000 + 10 * 1000) / 1000).toString()
             );
 
-            const order_args = {
-                side: Side.SELL,
-                tokenID: my_position.asset,
-                size: normalizedSize,
-                price: normalizedPrice,
-                feeRateBps: 0,
-                expiration: oneMinute,
-            };
-            console.log('MERGE Order args:', order_args);
-            const signedOrder = await clobClient.createOrder(order_args, {
-                tickSize: marketInfo.tickSize,
-                negRisk: negRisk,
-            });
+            const signedOrder = await clobClient.createOrder(
+                {
+                    side: Side.SELL,
+                    tokenID: my_position.asset,
+                    size: normalizedSize,
+                    price: normalizedPrice,
+                    feeRateBps: 0,
+                    expiration: oneMinute,
+                },
+                {
+                    tickSize: marketInfo.tickSize,
+                    negRisk: negRisk,
+                }
+            );
+            console.log('Created MERGE order:', signedOrder);
+
             const resp = await clobClient.postOrder(signedOrder, OrderType.GTD);
 
             if (resp.success === true) {
@@ -218,6 +224,7 @@ const postOrder = async (
 
             normalizedSize = +(finalMakerAmountRounded / normalizedPrice).toFixed(5);
 
+            /*
             console.log('🔍 After normalization:');
             console.log(`   normalizedSize: ${normalizedSize}`);
             console.log(`   normalizedPrice: ${normalizedPrice}`);
@@ -227,23 +234,24 @@ const postOrder = async (
             console.log(
                 `   Expected in 6-decimals: ${Math.round(normalizedSize * normalizedPrice * 1000000)}`
             );
+            */
+
             const oneMinute = parseInt(
                 ((new Date().getTime() + 60 * 1000 + 10 * 1000) / 1000).toString()
             );
-            const order_args = {
-                side: Side.BUY,
-                tokenID: trade.asset,
-                size: normalizedSize,
-                price: normalizedPrice,
-                feeRateBps: 0,
-                expiration: oneMinute,
-            };
 
-            console.log('BUY Order args (normalized):', order_args);
-            const signedOrder = await clobClient.createOrder(order_args, {
-                tickSize: marketInfo.tickSize,
-                negRisk: negRisk,
-            });
+            const signedOrder = await clobClient.createOrder(
+                {
+                    side: Side.BUY,
+                    tokenID: trade.asset,
+                    size: normalizedSize,
+                    price: normalizedPrice,
+                    expiration: oneMinute,
+                    feeRateBps: 0,
+                },
+                { tickSize: marketInfo.tickSize, negRisk: negRisk }
+            );
+            console.log('Created BUY order:', signedOrder);
             const resp = await clobClient.postOrder(signedOrder, OrderType.GTD);
 
             if (resp.success === true) {
@@ -318,20 +326,24 @@ const postOrder = async (
             const oneMinute = parseInt(
                 ((new Date().getTime() + 60 * 1000 + 10 * 1000) / 1000).toString()
             );
-            const order_args = {
-                side: Side.SELL,
-                tokenID: trade.asset,
-                size: normalizedSize,
-                price: normalizedPrice,
-                feeRateBps: 0,
-                expiration: oneMinute,
-            };
 
-            console.log('SELL Order args:', order_args);
-            const signedOrder = await clobClient.createOrder(order_args, {
-                tickSize: marketInfo.tickSize,
-                negRisk: negRisk,
-            });
+            const signedOrder = await clobClient.createOrder(
+                {
+                    side: Side.SELL,
+                    tokenID: trade.asset,
+                    size: normalizedSize,
+                    price: normalizedPrice,
+                    feeRateBps: 0,
+                    expiration: oneMinute,
+                },
+                {
+                    tickSize: marketInfo.tickSize,
+                    negRisk: negRisk,
+                }
+            );
+
+            console.log('Created SELL order:', signedOrder);
+
             const resp = await clobClient.postOrder(signedOrder, OrderType.GTD);
 
             if (resp.success === true) {
