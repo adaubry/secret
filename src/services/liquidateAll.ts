@@ -77,15 +77,12 @@ const liquidateAll = async (clobClient: ClobClient) => {
                 const negRisk = marketInfo?.negRisk || false;
 
                 // Create sell order at best bid price
-                const expiration = Math.floor(Date.now() / 1000) + 60; // 1 minute expiration
-
                 const signedOrder = await clobClient.createOrder(
                     {
                         side: Side.SELL,
                         tokenID: position.asset,
                         size: sellSize,
                         price: sellPrice,
-                        expiration: expiration,
                         feeRateBps: 0,
                     },
                     {

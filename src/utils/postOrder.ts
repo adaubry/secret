@@ -325,10 +325,6 @@ const postOrder = async (
             );
 
             normalizedSize = +(finalMakerAmountRounded / normalizedPrice).toFixed(5);
-            const oneMinute = parseInt(
-                ((new Date().getTime() + 60 * 1000 + 10 * 1000) / 1000).toString()
-            );
-
             const signedOrder = await clobClient.createOrder(
                 {
                     side: Side.SELL,
@@ -336,7 +332,6 @@ const postOrder = async (
                     size: normalizedSize,
                     price: normalizedPrice,
                     feeRateBps: 0,
-                    expiration: oneMinute,
                 },
                 {
                     tickSize: marketInfo.tickSize,
@@ -346,7 +341,8 @@ const postOrder = async (
 
             console.log('Created SELL order:', signedOrder);
 
-            const resp = await clobClient.postOrder(signedOrder, OrderType.GTD);
+	    //Intentionnaly changing sell to GTC to liquidate
+            const resp = await clobClient.postOrder(signedOrder, OrderType.GTC);
 
             if (resp.success === true) {
                 retry = 0;

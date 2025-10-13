@@ -14,9 +14,9 @@ export const main = async () => {
     console.log(`My Wallet addresss is: ${PROXY_WALLET}`);
     const clobClient = await createClobClient();
 
-    liquidateAll(clobClient); //Uncomment to liquidate all positions immediately
-    //tradeMonitor(); //Monitor target user's transactions
-    //tradeExecutor(clobClient); //Execute transactions on your wallet
+//    liquidateAll(clobClient); //Uncomment to liquidate all positions immediately
+    tradeMonitor(); //Monitor target user's transactions
+    tradeExecutor(clobClient); //Execute transactions on your wallet
 };
 
 main();
