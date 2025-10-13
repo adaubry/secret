@@ -240,6 +240,7 @@ const postOrder = async (
                 ((new Date().getTime() + 60 * 1000 + 10 * 1000) / 1000).toString()
             );
 
+            console.log('Expiration timestamp:', oneMinute);
             const signedOrder = await clobClient.createOrder(
                 {
                     side: Side.BUY,
@@ -251,6 +252,7 @@ const postOrder = async (
                 },
                 { tickSize: marketInfo.tickSize, negRisk: negRisk }
             );
+            console.log('Signed order expiration:', signedOrder.expiration);
             console.log('Created BUY order:', signedOrder);
             const resp = await clobClient.postOrder(signedOrder, OrderType.GTD);
 
