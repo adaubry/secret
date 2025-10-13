@@ -1,46 +1,94 @@
-import { ClobClient, OrderType, Side } from '@polymarket/clob-client';
+import { ClobClient } from '@polymarket/clob-client';
+import { UserActivityInterface, UserPositionInterface } from '../interfaces/User';
 import { ENV } from '../config/env';
+import { getUserActivityModel } from '../models/userHistory';
+import fetchData from '../utils/fetchData';
+import spinner from '../utils/spinner';
 import getMyBalance from '../utils/getMyBalance';
+import postOrder from '../utils/postOrder';
 
 const USER_ADDRESS = ENV.USER_ADDRESS;
+const RETRY_LIMIT = ENV.RETRY_LIMIT;
 const PROXY_WALLET = ENV.PROXY_WALLET;
 
-const test = async (clobClient: ClobClient) => {
-    // const markets = await clobClient.getMarket(
-    //     '0x834b371fe993e95cd1aa98a29e77794d5ff6dcaddf71115a6ad522b4b64ec165'
-    // );
-    // console.log(`markets: `);
-    // console.log(markets);
-    // const orderbook = await clobClient.getOrderBook(
-    //     '104411547841791877252227935410049230769909951522603517050502627610163580155198'
-    // );
-    // console.log(`orderbook: `);
-    // console.log(orderbook);
-    // const signedOrder = await clobClient.createMarketOrder({
-    //     side: Side.BUY,
-    //     tokenID: '0x',
-    //     amount: 100,
-    //     price: 0.5,
-    // });
-    // const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
-    // console.log(resp);
-    // const resp = await clobClient.deleteApiKey();
-    // console.log(resp);
+let temp_trades: UserActivityInterface[] = [];
 
-    const price = (
-        await clobClient.getLastTradePrice(
-            '7335630785946116680591336507965313288831710468958917901279210617913444658937'
-        )
-    ).price;
-    console.log(price);
-    const signedOrder = await clobClient.createOrder({
-        side: Side.BUY,
-        tokenID: '7335630785946116680591336507965313288831710468958917901279210617913444658937',
-        size: 5,
-        price,
-    });
-    const resp = await clobClient.postOrder(signedOrder, OrderType.GTC);
-    console.log(resp);
+const UserActivity = getUserActivityModel(USER_ADDRESS);
+
+const readTempTrade = async () => {
+    temp_trades = (
+        await UserActivity.find({
+            $and: [{ type: 'TRADE' }, { bot: false }, { botExcutedTime: { $lt: RETRY_LIMIT } }],
+        }).exec()
+    ).map((trade) => trade as UserActivityInterface);
 };
 
-export default test;
+const doTrading = async (clobClient: ClobClient) => {
+    for (const trade of temp_trades) {
+        console.log('Trade to copy:', trade);
+        // const market = await clobClient.getMarket(trade.conditionId);
+        const my_positions: UserPositionInterface[] = await fetchData(
+            `https://data-api.polymarket.com/positions?user=${PROXY_WALLET}`
+        );
+        const user_positions: UserPositionInterface[] = await fetchData(
+            `https://data-api.polymarket.com/positions?user=${USER_ADDRESS}`
+        );
+        const my_position = my_positions.find(
+            (position: UserPositionInterface) => position.conditionId === trade.conditionId
+        );
+        const user_position = user_positions.find(
+            (position: UserPositionInterface) => position.conditionId === trade.conditionId
+        );
+        const my_balance = await getMyBalance(PROXY_WALLET);
+        const user_balance = await getMyBalance(USER_ADDRESS);
+        console.log('My current balance:', my_balance);
+        console.log('User current balance:', user_balance);
+        if (trade.side === 'BUY') {
+            if (user_position && my_position && my_position.asset !== trade.asset) {
+                await postOrder(
+                    clobClient,
+                    'merge',
+                    my_position,
+                    user_position,
+                    trade,
+                    my_balance,
+                    user_balance
+                );
+            } else {
+                await postOrder(
+                    clobClient,
+                    'buy',
+                    my_position,
+                    user_position,
+                    trade,
+                    my_balance,
+                    user_balance
+                );
+            }
+        } else if (trade.side === 'SELL') {
+            await postOrder(
+                clobClient,
+                'sell',
+                my_position,
+                user_position,
+                trade,
+                my_balance,
+                user_balance
+            );
+        } else {
+            console.log('Not supported trade type');
+
+            await UserActivity.updateOne(
+                { _id: trade._id },
+
+                { bot: true, botExcutedTime: trade.botExcutedTime + 1 }
+            );
+        }
+    }
+};
+
+const tradeExcutor = async (clobClient: ClobClient) => {
+    doTrading(clobClient);
+};
+
+export default tradeExcutor;
