@@ -171,8 +171,8 @@ const postOrder = async (
         console.log('ratio', ratio);
         let remainingUSDC: number;
         if (ratio > 1) {
-            remainingUSDC = trade.usdcSize * 2;
-            console.log('ratio > 1 thus ratio is set to 2');
+            remainingUSDC = trade.usdcSize * 1;
+            console.log('ratio > 1 thus ratio is set to 1');
         } else {
             remainingUSDC = trade.usdcSize * ratio;
         }
@@ -282,8 +282,8 @@ const postOrder = async (
         } else {
             const ratio = trade.size / (user_position.size + trade.size);
             if (ratio > 1) {
-                remainingTokens = my_position.size * 2;
-                console.log('ratio > 1 thus ratio is set to 2');
+                remainingTokens = my_position.size * 1;
+                console.log('ratio > 1 thus ratio is set to 1');
             } else {
                 console.log('ratio', ratio);
                 remainingTokens = my_position.size * ratio;
