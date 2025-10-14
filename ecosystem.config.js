@@ -2,8 +2,7 @@ module.exports = {
   apps: [
     {
       name: "polymarket-copytrading",
-      script: "npm",
-      args: "run start",
+      script: "npm run start",
       env: {
         NODE_ENV: "prod",
       },
