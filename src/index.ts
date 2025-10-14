@@ -1,6 +1,6 @@
 import connectDB from './config/db';
 import { ENV } from './config/env';
-import createClobClient from './utils/createClobClient';
+import createClobClient from './services/createClobClient';
 import tradeExecutor from './services/tradeExecutor';
 import tradeMonitor from './services/tradeMonitor';
 import liquidateAll from './services/liquidateAll';
@@ -14,7 +14,7 @@ export const main = async () => {
     console.log(`My Wallet addresss is: ${PROXY_WALLET}`);
     const clobClient = await createClobClient();
 
-//    liquidateAll(clobClient); //Uncomment to liquidate all positions immediately
+    //    liquidateAll(clobClient); //Uncomment to liquidate all positions immediately
     tradeMonitor(); //Monitor target user's transactions
     tradeExecutor(clobClient); //Execute transactions on your wallet
 };
