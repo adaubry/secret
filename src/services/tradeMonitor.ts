@@ -62,7 +62,7 @@ const tradeMonitor = async () => {
     await init(); //Load my oders before sever downs
     while (true) {
         await fetchTradeData(); //Fetch all user activities
-        await new Promise((resolve) => setTimeout(resolve, FETCH_INTERVAL * 1000)); //Fetch user activities every second
+        await new Promise((resolve) => setTimeout(resolve, FETCH_INTERVAL * 10)); //Fetch user activities every 1/100 seconds
     }
 };
 
