@@ -58,7 +58,7 @@ const fetchTradeData = async () => {
 };
 
 const tradeMonitor = async () => {
-    console.log('Trade Monitor is running every', FETCH_INTERVAL, 'seconds');
+    console.log('Trade Monitor is running every', FETCH_INTERVAL, '* 1/100 of a second');
     await init(); //Load my oders before sever downs
     while (true) {
         await fetchTradeData(); //Fetch all user activities
