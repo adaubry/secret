@@ -171,12 +171,11 @@ const postOrder = async (
         console.log('ratio', ratio);
         let remainingUSDC: number;
         if (ratio > 1) {
-            remainingUSDC = trade.usdcSize * 0.5;
-            console.log('ratio > 1,  ratio is set to 0.5');
+            remainingUSDC = trade.usdcSize * 1;
+            console.log('ratio > 1,  ratio is set to 1');
         } else {
-            remainingUSDC = trade.usdcSize * (ratio / 2) ;
+            remainingUSDC = trade.usdcSize * ratio;
         }
-	console.log('Reminder: Ratio is halved')
         let retry = 0;
         while (remainingUSDC > 0 && retry < RETRY_LIMIT) {
             const orderBook = await clobClient.getOrderBook(trade.asset);
@@ -282,11 +281,11 @@ const postOrder = async (
         } else {
             const ratio = trade.size / (user_position.size + trade.size);
             if (ratio > 1) {
-                remainingTokens = my_position.size * 0.5;
-                console.log('ratio > 1 , ratio is set to 0.5');
+                remainingTokens = my_position.size * 1;
+                console.log('ratio > 1 , ratio is set to 1');
             } else {
                 console.log('ratio', ratio);
-                remainingTokens = my_position.size * (ratio / 2);
+                remainingTokens = my_position.size * ratio ;
             }
         }
 
