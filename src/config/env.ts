@@ -11,8 +11,6 @@ const requiredEnv = [
     'RPC_URL',
     'USDC_CONTRACT_ADDRESS',
     'OPENWEATHER_API_KEY',
-    'TELEGRAM_BOT_TOKEN',
-    'TELEGRAM_CHAT_ID',
 ];
 
 requiredEnv.forEach((env) => {
@@ -38,8 +36,8 @@ export const ENV = {
     // Weather APIs
     OPENWEATHER_API_KEY: process.env.OPENWEATHER_API_KEY as string,
     WEATHER_UPDATE_INTERVAL: parseInt(process.env.WEATHER_UPDATE_INTERVAL || '600000', 10), // 10 minutes default
-    MARKET_SCAN_INTERVAL: parseInt(process.env.MARKET_SCAN_INTERVAL || '300000', 10), // 5 minutes default
-    MAIN_LOOP_INTERVAL: parseInt(process.env.MAIN_LOOP_INTERVAL || '120000', 10), // 2 minutes default
+    MARKET_SCAN_INTERVAL: parseInt(process.env.MARKET_SCAN_INTERVAL || '60000', 10), // 1 minute default
+    MAIN_LOOP_INTERVAL: parseInt(process.env.MAIN_LOOP_INTERVAL || '60000', 10), // 1 minute default
 
     // Safety thresholds
     MIN_SAFETY_SCORE: parseInt(process.env.MIN_SAFETY_SCORE || '95', 10),
@@ -53,11 +51,6 @@ export const ENV = {
 
     // Wallet encryption
     WALLET_ENCRYPTION_PASSWORD: process.env.WALLET_ENCRYPTION_PASSWORD || 'default-password',
-
-    // Alerts
-    TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN as string,
-    TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID as string,
-    ALERT_EMAIL: process.env.ALERT_EMAIL as string,
 
     // Mode
     PAPER_TRADING_MODE: process.env.PAPER_TRADING_MODE === 'true',
