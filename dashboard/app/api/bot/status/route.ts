@@ -1,6 +1,4 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/mongodb';
-import { ActionLog } from '@/models/logs';
 
 /**
  * Bot Status API Endpoint
