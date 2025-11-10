@@ -13,6 +13,7 @@ interface Market {
   noPrice: number | null;
   resolved: boolean;
   resolutionOutcome: string | null;
+  active: boolean;
   yesSafetyScore: number | null;
   noSafetyScore: number | null;
   isSafe: boolean;
@@ -250,8 +251,17 @@ export default function Dashboard() {
             <h2 className="text-2xl font-bold text-white mb-4">
               All Possible Bets ({markets.length})
             </h2>
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              {markets.map((market) => (
+            {markets.length === 0 ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-lg p-8 text-center">
+                <Activity className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                <p className="text-slate-400">No markets found</p>
+                <p className="text-slate-500 text-sm mt-2">
+                  Markets will appear here once they are scanned and stored in the database
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {markets.map((market) => (
                 <div
                   key={market.marketId}
                   className="bg-slate-900 border border-slate-800 rounded-lg p-4"
@@ -261,11 +271,23 @@ export default function Dashboard() {
                       <h3 className="text-white font-semibold text-sm flex-1">
                         {market.question}
                       </h3>
-                      {market.isSafe && (
-                        <span className="bg-green-500/20 border border-green-500 text-green-400 text-xs px-2 py-1 rounded ml-2">
-                          SAFE
-                        </span>
-                      )}
+                      <div className="flex gap-2 ml-2">
+                        {market.resolved && (
+                          <span className="bg-slate-700 border border-slate-600 text-slate-300 text-xs px-2 py-1 rounded">
+                            RESOLVED {market.resolutionOutcome ? `(${market.resolutionOutcome})` : ''}
+                          </span>
+                        )}
+                        {!market.resolved && market.isSafe && (
+                          <span className="bg-green-500/20 border border-green-500 text-green-400 text-xs px-2 py-1 rounded">
+                            SAFE
+                          </span>
+                        )}
+                        {!market.resolved && !market.active && (
+                          <span className="bg-yellow-500/20 border border-yellow-500 text-yellow-400 text-xs px-2 py-1 rounded">
+                            INACTIVE
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-slate-400">
                       <span>{market.city}</span>
@@ -332,7 +354,8 @@ export default function Dashboard() {
                   )}
                 </div>
               ))}
-            </div>
+              </div>
+            )}
           </div>
         )}
 
