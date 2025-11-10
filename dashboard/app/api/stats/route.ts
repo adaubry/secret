@@ -10,11 +10,6 @@ async function connectDB() {
   await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/weather_arbitrage');
 }
 
-interface Position {
-  pnl?: number;
-  status: string;
-}
-
 interface CircuitBreaker {
   active: boolean;
   name: string;
@@ -26,7 +21,6 @@ export async function GET() {
 
     // Get models
     const db = mongoose.connection;
-    const positionCollection = db.collection('positions');
     const circuitBreakerCollection = db.collection('circuit_breakers');
     const portfolioMetricsCollection = db.collection('portfolio_metrics');
 
