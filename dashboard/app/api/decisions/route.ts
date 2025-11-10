@@ -18,7 +18,10 @@ export async function GET() {
 
     // Get recent trade decisions (limit to last 20)
     const decisions = await decisionCollection
-      .find({}, { sort: { timestamp: -1 }, limit: 20 })
+      .aggregate([
+        { $sort: { timestamp: -1 } },
+        { $limit: 20 }
+      ])
       .toArray();
 
     const formatted = decisions.map((dec: any) => ({
