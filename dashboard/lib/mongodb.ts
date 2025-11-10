@@ -27,17 +27,13 @@ export async function connectToDatabase() {
             bufferCommands: false,
         };
 
+        // @ts-ignore - Next.js MongoDB caching pattern
         cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
             return mongoose;
         });
     }
 
-    try {
-        cached.conn = await cached.promise;
-    } catch (e) {
-        cached.promise = null;
-        throw e;
-    }
+    cached.conn = await cached.promise;
 
     return cached.conn;
 }

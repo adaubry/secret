@@ -30,7 +30,7 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { action, reason } = body;
+        const { action } = body;
 
         if (!['pause', 'resume', 'stop', 'emergency_stop'].includes(action)) {
             return NextResponse.json(
