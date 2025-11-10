@@ -10,21 +10,31 @@ import { Market, Position, PortfolioMetrics, TradeDecision } from '../models/wea
 import { ActionLog, ErrorLog } from '../models/logs';
 
 /**
- * Bot Orchestrator V2 - Revamped for competitive Polymarket trading
+ * Bot Orchestrator V2 - CORRECTED LOGIC
  *
- * Key changes:
- * - 60-second safe market detection loop
- * - Aggressive orderbook fetching for safe markets (2-5 second intervals)
- * - All-in liquidity allocation for safe markets
- * - London/New York focus only
- * - Auto day rotation (cleanup n-1, focus on n and n+1)
+ * CRITICAL FIX: A "safe bet" is a specific MARKET + SIDE combination, NOT a city.
+ *
+ * Example:
+ * - Event: "Highest temperature in London on Nov 10"
+ * - Creates MULTIPLE markets:
+ *   - Market 1: "Will it be < 50°F?" → Can buy YES or NO
+ *   - Market 2: "Will it be 50-51°F?" → Can buy YES or NO
+ *   - Market 3: "Will it be 55-56°F?" → Can buy YES or NO
+ *
+ * Safe bets:
+ * - "Buying NO on Market 1" (if temp is 55°F)
+ * - "Buying YES on Market 3" (if temp is 55.5°F and it's evening)
+ * - Both can be safe AT THE SAME TIME
  */
 
 interface SafeMarket {
-    marketId: string;
-    city: string;
+    marketId: string; // e.g. "0x123abc"
+    tokenId: string; // e.g. "0x123abc-YES" or "0x123abc-NO"
+    city: string; // e.g. "London"
+    question: string; // e.g. "Will max temp be 55-56°F?"
+    thresholdTemp: number; // e.g. 55 (lower bound) or 56 (upper bound)
+    side: 'YES' | 'NO'; // Which outcome we're buying
     safetyScore: number;
-    side: 'YES' | 'NO';
     expectedProfit: number;
     currentPrice: number;
     lastChecked: number;
@@ -34,8 +44,8 @@ interface SafeMarket {
 let botRunning = false;
 let botPaused = false;
 let emergencyStop = false;
-let safeMarkets: Map<string, SafeMarket> = new Map();
-let orderbookFetchersActive: Map<string, NodeJS.Timeout> = new Map();
+let safeMarkets: Map<string, SafeMarket> = new Map(); // Key: marketId-side
+let orderbookFetchersActive: Map<string, NodeJS.Timeout> = new Map(); // Key: marketId-side
 let lastMarketScan = 0;
 let lastWeatherUpdate = 0;
 let lastDayRotation = 0;
@@ -51,7 +61,7 @@ const CITY_COORDINATES = {
  */
 export async function initializeBotV2(clobClient: ClobClient): Promise<void> {
     console.log('🤖 Starting Weather Arbitrage Bot V2 (Competitive Mode)...');
-    await logAction('BOT_INIT', 'Initializing bot V2 with competitive trading strategy');
+    await logAction('BOT_INIT', 'Initializing bot V2 with corrected trading logic');
 
     await initializeCircuitBreakers();
     await performDayRotation();
@@ -95,10 +105,10 @@ export async function runSafeMarketDetectionLoop(clobClient: ClobClient, usdcBal
             lastWeatherUpdate = now;
         }
 
-        // CORE: Detect safe markets (every 60 seconds)
-        await detectSafeMarkets(clobClient, usdcBalance);
+        // CORE: Detect safe BETS (every 60 seconds)
+        await detectSafeBets(clobClient, usdcBalance);
 
-        // Start aggressive orderbook fetching for safe markets
+        // Start aggressive orderbook fetching for safe bets
         await manageOrderbookFetchers(clobClient, usdcBalance);
 
         // Update portfolio metrics
@@ -111,30 +121,24 @@ export async function runSafeMarketDetectionLoop(clobClient: ClobClient, usdcBal
 }
 
 /**
- * Detect safe markets - Core strategy implementation
+ * Detect safe BETS - Core strategy implementation
+ * CRITICAL: Each market has YES and NO outcomes. We evaluate BOTH separately.
  */
-async function detectSafeMarkets(clobClient: ClobClient, usdcBalance: number): Promise<void> {
+async function detectSafeBets(clobClient: ClobClient, usdcBalance: number): Promise<void> {
     try {
-        await logAction('DETECT_SAFE_MARKETS', 'Starting safe market detection');
+        await logAction('DETECT_SAFE_BETS', 'Starting safe bet detection');
 
         const activeMarkets = await getActiveMarkets();
-        const newSafeMarkets: Map<string, SafeMarket> = new Map();
+        const newSafeBets: Map<string, SafeMarket> = new Map();
 
         for (const market of activeMarkets) {
-            // Skip if already have position
-            const existing = await Position.findOne({
-                market_id: market.market_id,
-                status: 'OPEN',
-            });
-            if (existing) continue;
-
             const weatherData = await getLatestWeatherData(market.city);
             if (!weatherData) continue;
 
             const marketData = await Market.findOne({ market_id: market.market_id }).lean();
             if (!marketData || !marketData.yes_price || !marketData.no_price) continue;
 
-            // Calculate safety score
+            // Calculate safety score for this market
             const safetyScore = await calculateSafetyScore({
                 marketId: market.market_id,
                 currentTemp: weatherData.current_temp,
@@ -147,7 +151,7 @@ async function detectSafeMarkets(clobClient: ClobClient, usdcBalance: number): P
                 orderBookVolume: null,
             });
 
-            // Check if market is SAFE (score >= 95 and profitable)
+            // IMPORTANT: Check if this specific market+side combination is safe
             if (safetyScore.totalScore >= ENV.MIN_SAFETY_SCORE &&
                 safetyScore.recommendation !== 'SKIP' &&
                 safetyScore.expectedProfitPercent &&
@@ -155,87 +159,108 @@ async function detectSafeMarkets(clobClient: ClobClient, usdcBalance: number): P
 
                 const side = safetyScore.recommendation === 'BUY_YES' ? 'YES' : 'NO';
                 const price = side === 'YES' ? (marketData.yes_price || 0.5) : (marketData.no_price || 0.5);
+                const tokenId = `${market.market_id}-${side}`;
+                const safeBetKey = `${market.market_id}-${side}`; // Unique key for this bet
 
-                newSafeMarkets.set(market.market_id, {
+                // Check if we already have a position on this specific market+side
+                const existing = await Position.findOne({
+                    market_id: market.market_id,
+                    side: side,
+                    status: 'OPEN',
+                });
+                if (existing) continue;
+
+                newSafeBets.set(safeBetKey, {
                     marketId: market.market_id,
+                    tokenId: tokenId,
                     city: market.city,
-                    safetyScore: safetyScore.totalScore,
+                    question: market.question,
+                    thresholdTemp: market.threshold_temp,
                     side,
+                    safetyScore: safetyScore.totalScore,
                     expectedProfit: safetyScore.expectedProfitPercent,
                     currentPrice: price,
                     lastChecked: Date.now(),
                 });
 
-                await logAction('SAFE_MARKET_DETECTED', `Safe market found: ${market.city} ${market.threshold_temp}°F`, {
+                await logAction('SAFE_BET_DETECTED', `Safe bet: ${side} on "${market.question}"`, {
                     marketId: market.market_id,
+                    tokenId: tokenId,
+                    question: market.question,
+                    side: side,
                     safetyScore: safetyScore.totalScore,
                     expectedProfit: safetyScore.expectedProfitPercent,
-                    side,
+                    currentPrice: price,
                 });
 
-                console.log(`🎯 SAFE MARKET: ${market.city} ${market.threshold_temp}°F - Score: ${safetyScore.totalScore}, Expected profit: ${safetyScore.expectedProfitPercent.toFixed(2)}%`);
+                console.log(`🎯 SAFE BET: ${side} on "${market.question}" (Score: ${safetyScore.totalScore}, Profit: ${safetyScore.expectedProfitPercent.toFixed(2)}%)`);
             }
         }
 
-        // Update safe markets
-        safeMarkets = newSafeMarkets;
+        // Update safe bets
+        safeMarkets = newSafeBets;
 
         if (safeMarkets.size > 0) {
-            await logAction('SAFE_MARKETS_UPDATE', `Currently tracking ${safeMarkets.size} safe markets`, {
-                markets: Array.from(safeMarkets.values()).map(m => ({
-                    marketId: m.marketId,
-                    city: m.city,
+            await logAction('SAFE_BETS_UPDATE', `Currently tracking ${safeMarkets.size} safe bets`, {
+                bets: Array.from(safeMarkets.values()).map(m => ({
+                    question: m.question,
+                    side: m.side,
                     score: m.safetyScore,
                 })),
             });
         }
 
     } catch (error: any) {
-        await logError('DETECT_SAFE_MARKETS_ERROR', error.message, { stack: error.stack });
+        await logError('DETECT_SAFE_BETS_ERROR', error.message, { stack: error.stack });
     }
 }
 
 /**
- * Manage aggressive orderbook fetchers for safe markets
+ * Manage aggressive orderbook fetchers for safe bets
+ * Each safe bet (market+side) gets its own fetcher
  */
 async function manageOrderbookFetchers(clobClient: ClobClient, usdcBalance: number): Promise<void> {
-    // Stop fetchers for markets no longer safe
-    for (const [marketId, interval] of orderbookFetchersActive.entries()) {
-        if (!safeMarkets.has(marketId)) {
+    // Stop fetchers for bets no longer safe
+    for (const [safeBetKey, interval] of orderbookFetchersActive.entries()) {
+        if (!safeMarkets.has(safeBetKey)) {
             clearInterval(interval);
-            orderbookFetchersActive.delete(marketId);
-            await logAction('STOP_ORDERBOOK_FETCHER', `Stopped orderbook fetcher for ${marketId}`);
+            orderbookFetchersActive.delete(safeBetKey);
+            await logAction('STOP_ORDERBOOK_FETCHER', `Stopped orderbook fetcher for ${safeBetKey}`);
         }
     }
 
-    // Start fetchers for new safe markets
-    for (const [marketId, safeMarket] of safeMarkets.entries()) {
-        if (!orderbookFetchersActive.has(marketId)) {
-            await startAggressiveOrderbookFetcher(clobClient, safeMarket, usdcBalance);
+    // Start fetchers for new safe bets
+    for (const [safeBetKey, safeBet] of safeMarkets.entries()) {
+        if (!orderbookFetchersActive.has(safeBetKey)) {
+            await startAggressiveOrderbookFetcher(clobClient, safeBet, usdcBalance, safeBetKey);
         }
     }
 }
 
 /**
- * Start aggressive orderbook fetching for a safe market
+ * Start aggressive orderbook fetching for a safe bet (specific market+side)
  * Fetches every 2-5 seconds to capture opportunities quickly
  */
 async function startAggressiveOrderbookFetcher(
     clobClient: ClobClient,
-    safeMarket: SafeMarket,
-    usdcBalance: number
+    safeBet: SafeMarket,
+    usdcBalance: number,
+    safeBetKey: string
 ): Promise<void> {
-    await logAction('START_ORDERBOOK_FETCHER', `Starting aggressive orderbook fetcher for ${safeMarket.city}`, {
-        marketId: safeMarket.marketId,
+    await logAction('START_ORDERBOOK_FETCHER', `Starting fetcher: ${safeBet.side} on "${safeBet.question}"`, {
+        marketId: safeBet.marketId,
+        tokenId: safeBet.tokenId,
+        side: safeBet.side,
+        question: safeBet.question,
         fetchInterval: '2-5 seconds',
     });
 
     const fetchInterval = setInterval(async () => {
         try {
             // Check if still safe and bot still running
-            if (!botRunning || botPaused || emergencyStop || !safeMarkets.has(safeMarket.marketId)) {
+            if (!botRunning || botPaused || emergencyStop || !safeMarkets.has(safeBetKey)) {
                 clearInterval(fetchInterval);
-                orderbookFetchersActive.delete(safeMarket.marketId);
+                orderbookFetchersActive.delete(safeBetKey);
                 return;
             }
 
@@ -243,123 +268,138 @@ async function startAggressiveOrderbookFetcher(
             const breakerTriggered = await runAllCircuitBreakerChecks(usdcBalance);
             if (breakerTriggered) {
                 clearInterval(fetchInterval);
-                orderbookFetchersActive.delete(safeMarket.marketId);
+                orderbookFetchersActive.delete(safeBetKey);
                 await logAction('ORDERBOOK_FETCHER_STOPPED', 'Circuit breaker triggered');
                 return;
             }
 
-            // Fetch orderbook
-            await fetchOrderbookAndExecute(clobClient, safeMarket, usdcBalance);
+            // Fetch orderbook for this specific market+side
+            await fetchOrderbookAndExecute(clobClient, safeBet, usdcBalance, safeBetKey);
 
         } catch (error: any) {
-            await logError('ORDERBOOK_FETCH_ERROR', error.message, { marketId: safeMarket.marketId });
+            await logError('ORDERBOOK_FETCH_ERROR', error.message, {
+                marketId: safeBet.marketId,
+                tokenId: safeBet.tokenId,
+                question: safeBet.question,
+            });
         }
     }, 2000 + Math.random() * 3000); // Random 2-5 seconds to avoid pattern detection
 
-    orderbookFetchersActive.set(safeMarket.marketId, fetchInterval);
+    orderbookFetchersActive.set(safeBetKey, fetchInterval);
 }
 
 /**
  * Fetch orderbook and execute if favorable order found
+ * IMPORTANT: Fetches the orderbook for the specific outcome (YES or NO)
  */
 async function fetchOrderbookAndExecute(
     clobClient: ClobClient,
-    safeMarket: SafeMarket,
-    usdcBalance: number
+    safeBet: SafeMarket,
+    usdcBalance: number,
+    safeBetKey: string
 ): Promise<void> {
     try {
-        // Get latest market data
-        const marketData = await Market.findOne({ market_id: safeMarket.marketId }).lean();
-        if (!marketData) return;
-
-        // Fetch orderbook from CLOB
-        const orderbook = await clobClient.getOrderBook(safeMarket.marketId);
+        // Fetch orderbook from CLOB for this specific token (market-YES or market-NO)
+        const orderbook = await clobClient.getOrderBook(safeBet.tokenId);
         if (!orderbook) return;
 
-        // Determine target side orderbook
-        const targetOrderbook = safeMarket.side === 'YES' ? orderbook.asks : orderbook.bids;
+        // For buying, we look at asks (sell orders)
+        const targetOrderbook = orderbook.asks;
         if (!targetOrderbook || targetOrderbook.length === 0) return;
 
         // Find best price
         const bestOrder = targetOrderbook[0];
         const bestPrice = parseFloat(bestOrder.price);
 
-        // Check if price is better than expected
-        if (bestPrice <= safeMarket.currentPrice * 1.02) { // Allow 2% slippage
-            await logAction('FAVORABLE_ORDER_FOUND', `Favorable order found in ${safeMarket.city}`, {
-                marketId: safeMarket.marketId,
-                side: safeMarket.side,
-                price: bestPrice,
-                expectedPrice: safeMarket.currentPrice,
+        // Check if price is favorable (within 2% slippage)
+        if (bestPrice <= safeBet.currentPrice * 1.02) {
+            await logAction('FAVORABLE_ORDER_FOUND', `Favorable: ${safeBet.side} on "${safeBet.question}"`, {
+                marketId: safeBet.marketId,
+                tokenId: safeBet.tokenId,
+                side: safeBet.side,
+                question: safeBet.question,
+                bestPrice: bestPrice,
+                expectedPrice: safeBet.currentPrice,
             });
 
             // Execute all-in trade
-            await executeAllInTrade(clobClient, safeMarket, bestPrice, usdcBalance);
+            await executeAllInTrade(clobClient, safeBet, bestPrice, usdcBalance, safeBetKey);
         }
 
     } catch (error: any) {
         // Silent failure for orderbook fetching - don't spam logs
         if (ENV.DEBUG_MODE) {
-            console.error(`Orderbook fetch failed for ${safeMarket.marketId}: ${error.message}`);
+            console.error(`Orderbook fetch failed for ${safeBet.tokenId}: ${error.message}`);
         }
     }
 }
 
 /**
- * Execute all-in trade for safe market
- * Allocates all available liquidity (split if multiple safe markets)
+ * Execute all-in trade for safe bet
+ * Allocates all available liquidity (split equally if multiple safe bets)
  */
 async function executeAllInTrade(
     clobClient: ClobClient,
-    safeMarket: SafeMarket,
+    safeBet: SafeMarket,
     price: number,
-    usdcBalance: number
+    usdcBalance: number,
+    safeBetKey: string
 ): Promise<void> {
     try {
-        // Calculate position size - split equally among safe markets
-        const numSafeMarkets = safeMarkets.size;
-        const allocationPerMarket = usdcBalance / numSafeMarkets;
-        const shares = allocationPerMarket / price;
+        // Calculate position size - split equally among all safe bets
+        const numSafeBets = safeMarkets.size;
+        const allocationPerBet = usdcBalance / numSafeBets;
+        const shares = allocationPerBet / price;
 
-        await logAction('EXECUTE_ALL_IN_TRADE', `Executing all-in trade for ${safeMarket.city}`, {
-            marketId: safeMarket.marketId,
-            allocation: allocationPerMarket,
+        await logAction('EXECUTE_ALL_IN_TRADE', `Executing: ${safeBet.side} on "${safeBet.question}"`, {
+            marketId: safeBet.marketId,
+            tokenId: safeBet.tokenId,
+            question: safeBet.question,
+            side: safeBet.side,
+            allocation: allocationPerBet,
             shares,
             price,
-            totalSafeMarkets: numSafeMarkets,
+            totalSafeBets: numSafeBets,
         });
 
         const result = await executeTrade(clobClient, {
-            marketId: safeMarket.marketId,
-            side: safeMarket.side,
+            marketId: safeBet.marketId,
+            side: safeBet.side,
             currentPrice: price,
-            confidence: safeMarket.safetyScore,
-            expectedProfit: safeMarket.expectedProfit,
+            confidence: safeBet.safetyScore,
+            expectedProfit: safeBet.expectedProfit,
             usdcBalance,
             shares,
         });
 
         if (result.success) {
-            console.log(`✅ ALL-IN TRADE EXECUTED: ${safeMarket.city} ${safeMarket.side} - $${allocationPerMarket.toFixed(2)}`);
+            console.log(`✅ TRADE EXECUTED: ${safeBet.side} on "${safeBet.question}" - $${allocationPerBet.toFixed(2)}`);
 
-            // Stop fetcher for this market
-            const fetcher = orderbookFetchersActive.get(safeMarket.marketId);
+            // Stop fetcher for this specific bet
+            const fetcher = orderbookFetchersActive.get(safeBetKey);
             if (fetcher) {
                 clearInterval(fetcher);
-                orderbookFetchersActive.delete(safeMarket.marketId);
+                orderbookFetchersActive.delete(safeBetKey);
             }
 
-            // Remove from safe markets
-            safeMarkets.delete(safeMarket.marketId);
+            // Remove from safe bets
+            safeMarkets.delete(safeBetKey);
 
-            await logAction('TRADE_SUCCESS', `Successfully executed all-in trade`, {
-                marketId: safeMarket.marketId,
+            await logAction('TRADE_SUCCESS', `Trade executed successfully`, {
+                marketId: safeBet.marketId,
+                tokenId: safeBet.tokenId,
+                question: safeBet.question,
+                side: safeBet.side,
                 orderId: result.orderId,
             });
         }
 
     } catch (error: any) {
-        await logError('EXECUTE_TRADE_ERROR', error.message, { marketId: safeMarket.marketId });
+        await logError('EXECUTE_TRADE_ERROR', error.message, {
+            marketId: safeBet.marketId,
+            tokenId: safeBet.tokenId,
+            question: safeBet.question,
+        });
     }
 }
 
@@ -494,7 +534,7 @@ export async function stopBot(reason: string): Promise<void> {
     botRunning = false;
 
     // Clear all orderbook fetchers
-    for (const [marketId, interval] of orderbookFetchersActive.entries()) {
+    for (const [safeBetKey, interval] of orderbookFetchersActive.entries()) {
         clearInterval(interval);
     }
     orderbookFetchersActive.clear();
@@ -509,7 +549,7 @@ export async function triggerEmergencyStop(reason: string): Promise<void> {
     botRunning = false;
 
     // Clear all orderbook fetchers immediately
-    for (const [marketId, interval] of orderbookFetchersActive.entries()) {
+    for (const [safeBetKey, interval] of orderbookFetchersActive.entries()) {
         clearInterval(interval);
     }
     orderbookFetchersActive.clear();
