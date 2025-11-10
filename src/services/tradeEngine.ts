@@ -2,6 +2,7 @@ import { ClobClient, OrderType, Side } from '@polymarket/clob-client';
 import { Position, TradeDecision } from '../models/weatherArbitrage';
 import { ENV } from '../config/env';
 import { runAllCircuitBreakerChecks, getActiveBreakers } from './circuitBreakers';
+import { alertTradeExecuted, alertError } from './alerts';
 
 /**
  * Trade Engine - Order placement and execution
@@ -22,10 +23,7 @@ interface ExecuteTradeInput {
  */
 export async function executeTrade(
     clobClient: ClobClient,
-    input: ExecuteTradeInput,
-    question: string,
-    yesPrice: number | null,
-    noPrice: number | null
+    input: ExecuteTradeInput
 ): Promise<{ success: boolean; orderId: string | null; error: string | null }> {
     const {
         marketId,
@@ -58,9 +56,9 @@ export async function executeTrade(
                     source: 'SKIPPED',
                 },
                 market_data: {
-                    question,
-                    yes_price: yesPrice,
-                    no_price: noPrice,
+                    question: marketId,
+                    yes_price: null,
+                    no_price: null,
                 },
                 order_id: null,
                 order_success: false,
@@ -68,7 +66,7 @@ export async function executeTrade(
             });
 
             await decision.save();
-            console.warn(`⚠️  Trade blocked by circuit breaker: ${activeBreakers.join(', ')}`);
+            console.warn(`⚠️  Trade blocked: ${activeBreakers.join(', ')}`);
             return { success: false, orderId: null, error: 'Circuit breaker active' };
         }
 
@@ -83,17 +81,10 @@ export async function executeTrade(
 
         const totalCost = shares * currentPrice;
         if (totalCost > usdcBalance * 0.9) {
-            // Don't risk more than 90% of balance
-            throw new Error(`Trade size too large: $${totalCost.toFixed(2)} vs balance $${usdcBalance.toFixed(2)}`);
+            throw new Error(`Trade size too large: $${totalCost.toFixed(2)}`);
         }
 
-        console.log(`\n💰 Executing trade:`);
-        console.log(`   Market: ${marketId}`);
-        console.log(`   Side: ${side}`);
-        console.log(`   Shares: ${shares}`);
-        console.log(`   Price: ${currentPrice}`);
-        console.log(`   Total Cost: $${totalCost.toFixed(2)}`);
-        console.log(`   Expected Profit: ${expectedProfit.toFixed(2)}%`);
+        console.log(`💰 Trade: ${side} ${shares} @ $${currentPrice} (profit: ${expectedProfit.toFixed(2)}%)`);
 
         // Get market info
         const marketInfo = await clobClient.getMarket(marketId);
@@ -102,26 +93,23 @@ export async function executeTrade(
         }
 
         const tickSize = parseFloat(marketInfo.tickSize || '0.01');
-
-        // Normalize price to tick size
         const normalizedPrice = Math.round(currentPrice / tickSize) * tickSize;
 
         if (!ENV.PAPER_TRADING_MODE) {
-            // Live trading - create and post order
+            // Live trading
             const order = await clobClient.createOrder(
                 {
-                    side: side === 'YES' ? Side.BUY : Side.BUY, // NO shares are bought on the NO side
+                    side: Side.BUY,
                     tokenID: side === 'YES' ? marketId + '-YES' : marketId + '-NO',
                     size: shares,
                     price: normalizedPrice,
-                    expiration: Math.floor(Date.now() / 1000) + 300, // 5 minute expiration
+                    expiration: Math.floor(Date.now() / 1000) + 300,
                     feeRateBps: 0,
                 },
                 { tickSize: marketInfo.tickSize, negRisk: marketInfo.negRisk || false }
             );
 
-            // Post order to CLOB
-            const response = await clobClient.postOrder(order, OrderType.FOK); // Fill or Kill
+            const response = await clobClient.postOrder(order, OrderType.FOK);
 
             if (!response.success) {
                 throw new Error(`Order failed: ${response.error}`);
@@ -149,16 +137,16 @@ export async function executeTrade(
                 safety_score: confidence,
                 profit_margin_percent: expectedProfit,
                 circuit_breaker_active: null,
-                reason: `Executed ${side} trade with ${confidence} confidence`,
+                reason: `Executed ${side} trade (safety: ${confidence})`,
                 temperature_data: {
                     current_temp: 0,
                     daily_max: 0,
                     source: 'EXECUTED',
                 },
                 market_data: {
-                    question,
-                    yes_price: yesPrice,
-                    no_price: noPrice,
+                    question: marketId,
+                    yes_price: null,
+                    no_price: null,
                 },
                 order_id: response.orderId || null,
                 order_success: true,
@@ -169,12 +157,12 @@ export async function executeTrade(
 
             await decision.save();
 
-            console.log(`✅ Trade executed successfully`);
-            console.log(`   Order ID: ${response.orderId}`);
+            console.log(`✅ Trade executed: ${response.orderId}`);
+            alertTradeExecuted(side, shares, normalizedPrice, expectedProfit);
 
             return { success: true, orderId: response.orderId || null, error: null };
         } else {
-            // Paper trading - just log it
+            // Paper trading
             const position = new Position({
                 market_id: marketId,
                 side,
@@ -195,16 +183,16 @@ export async function executeTrade(
                 safety_score: confidence,
                 profit_margin_percent: expectedProfit,
                 circuit_breaker_active: null,
-                reason: `PAPER TRADING: ${side} at ${normalizedPrice}`,
+                reason: `PAPER: ${side} @ ${normalizedPrice}`,
                 temperature_data: {
                     current_temp: 0,
                     daily_max: 0,
                     source: 'PAPER',
                 },
                 market_data: {
-                    question,
-                    yes_price: yesPrice,
-                    no_price: noPrice,
+                    question: marketId,
+                    yes_price: null,
+                    no_price: null,
                 },
                 order_id: `PAPER_${Date.now()}`,
                 order_success: true,
@@ -215,11 +203,12 @@ export async function executeTrade(
 
             await decision.save();
 
-            console.log(`📝 PAPER TRADE (not executed on blockchain)`);
+            console.log(`📝 PAPER TRADE: ${side} ${shares} @ $${normalizedPrice}`);
             return { success: true, orderId: `PAPER_${Date.now()}`, error: null };
         }
     } catch (error: any) {
-        console.error(`❌ Trade execution error:`, error.message);
+        console.error(`❌ Trade failed: ${error.message}`);
+        alertError(`Trade error: ${error.message}`);
 
         const decision = new TradeDecision({
             timestamp: new Date(),
@@ -236,9 +225,9 @@ export async function executeTrade(
                 source: 'ERROR',
             },
             market_data: {
-                question,
-                yes_price: yesPrice,
-                no_price: noPrice,
+                question: marketId,
+                yes_price: null,
+                no_price: null,
             },
             order_id: null,
             order_success: false,
@@ -248,20 +237,5 @@ export async function executeTrade(
         await decision.save();
 
         return { success: false, orderId: null, error: error.message };
-    }
-}
-
-/**
- * Cancel pending orders (called by circuit breaker)
- */
-export async function cancelPendingOrders(clobClient: ClobClient): Promise<void> {
-    try {
-        console.log('Canceling pending orders...');
-        // In production, fetch all pending orders and cancel them
-        // This depends on the CLOB API
-        // await clobClient.cancelAllOrders();
-        console.log('✅ Pending orders canceled');
-    } catch (error) {
-        console.error('❌ Error canceling orders:', error);
     }
 }
