@@ -25,41 +25,21 @@ function parseWeatherMarketQuestion(question: string): Partial<ScannedMarket> | 
     // Normalize question
     const q = question.toLowerCase();
 
-    // City extraction - look for common US city names
+    // City extraction - Focus on London and New York only
     const cityPatterns = [
+        'london',
         'new york',
-        'los angeles',
-        'chicago',
-        'houston',
-        'phoenix',
-        'philadelphia',
-        'san antonio',
-        'san diego',
-        'dallas',
-        'san jose',
-        'austin',
-        'jacksonville',
-        'denver',
-        'boston',
-        'seattle',
-        'miami',
-        'portland',
-        'atlanta',
-        'vegas',
-        'las vegas',
-        'sf',
-        'san francisco',
+        'nyc',
     ];
 
     let city = '';
     for (const pattern of cityPatterns) {
         if (q.includes(pattern)) {
-            city = pattern.split(' ')[0].charAt(0).toUpperCase() + pattern.split(' ')[0].slice(1);
-            if (pattern.includes(' ')) {
-                city = pattern
-                    .split(' ')
-                    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-                    .join(' ');
+            // Normalize city names
+            if (pattern === 'london') {
+                city = 'London';
+            } else if (pattern === 'new york' || pattern === 'nyc') {
+                city = 'New York';
             }
             break;
         }
