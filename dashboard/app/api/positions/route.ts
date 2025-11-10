@@ -18,7 +18,11 @@ export async function GET() {
 
     // Get open positions (limit to last 20)
     const positions = await positionCollection
-      .find({ status: 'OPEN' }, { sort: { timestamp: -1 }, limit: 20 })
+      .aggregate([
+        { $match: { status: 'OPEN' } },
+        { $sort: { timestamp: -1 } },
+        { $limit: 20 }
+      ])
       .toArray();
 
     const formatted = positions.map((pos: any) => ({
