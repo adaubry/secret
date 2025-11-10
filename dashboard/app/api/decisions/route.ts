@@ -13,7 +13,8 @@ export async function GET() {
   try {
     await connectDB();
 
-    const db = mongoose.connection;
+    const mongoClient = mongoose.connection.getClient();
+    const db = mongoClient.db();
     const decisionCollection = db.collection('trade_decisions');
 
     // Get recent trade decisions (limit to last 20)

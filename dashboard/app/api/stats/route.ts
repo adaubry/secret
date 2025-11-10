@@ -20,7 +20,8 @@ export async function GET() {
     await connectDB();
 
     // Get models
-    const db = mongoose.connection;
+    const mongoClient = mongoose.connection.getClient();
+    const db = mongoClient.db();
     const circuitBreakerCollection = db.collection('circuit_breakers');
     const portfolioMetricsCollection = db.collection('portfolio_metrics');
 

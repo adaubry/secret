@@ -13,7 +13,8 @@ export async function GET() {
   try {
     await connectDB();
 
-    const db = mongoose.connection;
+    const mongoClient = mongoose.connection.getClient();
+    const db = mongoClient.db();
     const positionCollection = db.collection('positions');
 
     // Get open positions (limit to last 20)
