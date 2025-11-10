@@ -22,9 +22,38 @@ PAPER_TRADING_MODE=true
 ```
 
 ### 3. Start MongoDB
+
+**Option A: Docker (Recommended - Cross-platform)**
 ```bash
+docker run -d -p 27017:27017 --name weather-bot-db mongo:latest
+```
+
+**Option B: MongoDB Atlas (Cloud - No Installation)**
+1. Create account at https://www.mongodb.com/cloud/atlas
+2. Create a free cluster
+3. Get connection string and update `MONGO_URI` in `.env`:
+```bash
+MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/weather_arbitrage
+```
+
+**Option C: macOS (Homebrew)**
+```bash
+brew tap mongodb/brew
+brew install mongodb-community
 brew services start mongodb-community
 ```
+
+**Option D: Linux (Ubuntu/Debian)**
+```bash
+sudo apt-get update
+sudo apt-get install -y mongodb
+sudo systemctl start mongodb
+```
+
+**Option E: Windows**
+1. Download from https://www.mongodb.com/try/download/community
+2. Run installer
+3. MongoDB starts automatically as a service
 
 ### 4. Run Bot
 ```bash
@@ -38,6 +67,28 @@ npm install
 npm run dev
 # Visit http://localhost:3000
 ```
+
+## MongoDB Setup
+
+### Stopping MongoDB
+
+**Docker:**
+```bash
+docker stop weather-bot-db
+docker rm weather-bot-db
+```
+
+**Homebrew (macOS):**
+```bash
+brew services stop mongodb-community
+```
+
+**Linux:**
+```bash
+sudo systemctl stop mongodb
+```
+
+**Atlas (Cloud):** No action needed (always running)
 
 ## How It Works
 
