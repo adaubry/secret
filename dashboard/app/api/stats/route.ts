@@ -7,7 +7,7 @@ async function connectDB() {
     return;
   }
 
-  await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/weather_arbitrage');
+  await mongoose.connect(process.env.MONGO_URI!);
 }
 
 interface CircuitBreaker {
