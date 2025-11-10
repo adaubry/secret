@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Activity, TrendingUp, TrendingDown, AlertCircle, Zap } from 'lucide-react';
+import { Activity, TrendingUp, TrendingDown, AlertCircle, Zap, Power, Pause, Play, XCircle, Target, Clock, DollarSign, BarChart3, AlertTriangle } from 'lucide-react';
 
 interface Stats {
   totalPnL: number;
@@ -10,8 +9,41 @@ interface Stats {
   winRate: number;
   openPositions: number;
   usdcBalance: number;
-  topicMarkets: number;
   circuitBreakers: string[];
+}
+
+interface BotStatus {
+  running: boolean;
+  paused: boolean;
+  emergencyStop: boolean;
+  safeMarketsCount: number;
+  activeOrderbookFetchers: number;
+  safeMarkets: SafeMarket[];
+}
+
+interface SafeMarket {
+  marketId: string;
+  city: string;
+  safetyScore: number;
+  side: 'YES' | 'NO';
+  expectedProfit: number;
+  currentPrice: number;
+  lastChecked: number;
+}
+
+interface ActionLog {
+  timestamp: string;
+  action: string;
+  message: string;
+  data?: any;
+}
+
+interface ErrorLog {
+  timestamp: string;
+  errorType: string;
+  message: string;
+  data?: any;
+  resolved: boolean;
 }
 
 interface Position {
@@ -22,51 +54,85 @@ interface Position {
   totalCost: number;
 }
 
-interface Decision {
-  timestamp: string;
-  marketId: string;
-  decision: string;
-  safetyScore: number;
-  profitMargin: number;
-}
-
-export default function Dashboard() {
+export default function DashboardV2() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [botStatus, setBotStatus] = useState<BotStatus | null>(null);
+  const [actionLogs, setActionLogs] = useState<ActionLog[]>([]);
+  const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
-  const [decisions, setDecisions] = useState<Decision[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [controlLoading, setControlLoading] = useState(false);
+
+  // Fetch all data
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [statsRes, statusRes, actionsRes, errorsRes, posRes] = await Promise.all([
+        fetch('/api/stats'),
+        fetch('/api/bot/status'),
+        fetch('/api/logs/actions?limit=50'),
+        fetch('/api/logs/errors?limit=20'),
+        fetch('/api/positions'),
+      ]);
+
+      if (statsRes.ok) setStats(await statsRes.json());
+      if (statusRes.ok) {
+        const data = await statusRes.json();
+        setBotStatus({
+          running: data.running,
+          paused: data.paused,
+          emergencyStop: data.emergencyStop,
+          safeMarketsCount: data.safeMarketsCount,
+          activeOrderbookFetchers: data.activeOrderbookFetchers,
+          safeMarkets: data.safeMarkets || [],
+        });
+      }
+      if (actionsRes.ok) {
+        const data = await actionsRes.json();
+        setActionLogs(data.logs || []);
+      }
+      if (errorsRes.ok) {
+        const data = await errorsRes.json();
+        setErrorLogs(data.logs || []);
+      }
+      if (posRes.ok) setPositions(await posRes.json());
+
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [statsRes, posRes, decRes] = await Promise.all([
-          fetch('/api/stats'),
-          fetch('/api/positions'),
-          fetch('/api/decisions'),
-        ]);
-
-        if (!statsRes.ok || !posRes.ok || !decRes.ok) {
-          throw new Error('Failed to fetch dashboard data');
-        }
-
-        setStats(await statsRes.json());
-        setPositions(await posRes.json());
-        setDecisions(await decRes.json());
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
-    const interval = setInterval(fetchData, 10000); // Refresh every 10 seconds
+    const interval = setInterval(fetchData, 5000); // Refresh every 5 seconds
     return () => clearInterval(interval);
   }, []);
 
-  if (loading) {
+  // Bot control functions
+  const sendBotCommand = async (action: string, reason?: string) => {
+    try {
+      setControlLoading(true);
+      const res = await fetch('/api/bot/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, reason: reason || `${action} via dashboard` }),
+      });
+
+      if (!res.ok) throw new Error('Command failed');
+
+      await fetchData(); // Refresh data
+    } catch (err) {
+      alert(`Failed to ${action}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setControlLoading(false);
+    }
+  };
+
+  if (loading && !stats) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center">
@@ -77,14 +143,14 @@ export default function Dashboard() {
     );
   }
 
-  if (error) {
+  if (error && !stats) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <p className="text-red-400">{error}</p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => fetchData()}
             className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
           >
             Retry
@@ -94,78 +160,93 @@ export default function Dashboard() {
     );
   }
 
-  if (!stats) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <p className="text-slate-400">No data available</p>
-      </div>
-    );
-  }
+  const getBotStatusColor = () => {
+    if (botStatus?.emergencyStop) return 'text-red-500';
+    if (botStatus?.paused) return 'text-yellow-500';
+    if (botStatus?.running) return 'text-green-500';
+    return 'text-slate-500';
+  };
 
-  const winRateColor = stats.winRate >= 80 ? 'text-green-400' : stats.winRate >= 50 ? 'text-yellow-400' : 'text-red-400';
-  const pnlColor = stats.totalPnL >= 0 ? 'text-green-400' : 'text-red-400';
+  const getBotStatusText = () => {
+    if (botStatus?.emergencyStop) return 'EMERGENCY STOP';
+    if (botStatus?.paused) return 'PAUSED';
+    if (botStatus?.running) return 'RUNNING';
+    return 'STOPPED';
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 p-4 md:p-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold text-white mb-2">🤖 Weather Arbitrage Bot</h1>
-        <p className="text-slate-400">Real-time monitoring dashboard</p>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div className="bg-slate-900 rounded-lg p-6 border border-slate-800">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-sm mb-2">Total P&L</p>
-              <p className={`text-3xl font-bold ${pnlColor}`}>
-                ${stats.totalPnL.toFixed(2)}
-              </p>
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-white mb-2">🤖 Trading Bot V2</h1>
+            <p className="text-slate-400">Competitive Polymarket Weather Arbitrage</p>
+          </div>
+          <div className="text-right">
+            <div className={`text-2xl font-bold ${getBotStatusColor()}`}>
+              {getBotStatusText()}
             </div>
-            {stats.totalPnL >= 0 ? (
-              <TrendingUp className="w-8 h-8 text-green-400" />
-            ) : (
-              <TrendingDown className="w-8 h-8 text-red-400" />
-            )}
-          </div>
-        </div>
-
-        <div className="bg-slate-900 rounded-lg p-6 border border-slate-800">
-          <div>
-            <p className="text-slate-400 text-sm mb-2">Win Rate</p>
-            <p className={`text-3xl font-bold ${winRateColor}`}>
-              {stats.winRate.toFixed(1)}%
-            </p>
-            <p className="text-slate-500 text-xs mt-1">
-              {stats.totalTrades} trades
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-slate-900 rounded-lg p-6 border border-slate-800">
-          <div>
-            <p className="text-slate-400 text-sm mb-2">Open Positions</p>
-            <p className="text-3xl font-bold text-blue-400">{stats.openPositions}</p>
-            <p className="text-slate-500 text-xs mt-1">
-              ${stats.openPositions > 0 ? (stats.totalPnL / stats.openPositions).toFixed(2) : 0} avg
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-slate-900 rounded-lg p-6 border border-slate-800">
-          <div>
-            <p className="text-slate-400 text-sm mb-2">USDC Balance</p>
-            <p className="text-3xl font-bold text-purple-400">
-              ${stats.usdcBalance.toFixed(2)}
-            </p>
+            <div className="text-slate-400 text-sm">
+              {botStatus?.safeMarketsCount || 0} safe markets detected
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Circuit Breakers Status */}
-      {stats.circuitBreakers.length > 0 && (
-        <div className="bg-red-900/20 border border-red-500 rounded-lg p-4 mb-8">
+      {/* Bot Controls */}
+      <div className="bg-slate-900 rounded-lg p-6 border border-slate-800 mb-6">
+        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+          <Power className="w-5 h-5" />
+          Bot Controls
+        </h2>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => sendBotCommand('pause')}
+            disabled={controlLoading || botStatus?.paused || !botStatus?.running}
+            className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-slate-700 disabled:text-slate-500 rounded text-white font-semibold flex items-center gap-2"
+          >
+            <Pause className="w-4 h-4" />
+            Pause
+          </button>
+          <button
+            onClick={() => sendBotCommand('resume')}
+            disabled={controlLoading || !botStatus?.paused}
+            className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-700 disabled:text-slate-500 rounded text-white font-semibold flex items-center gap-2"
+          >
+            <Play className="w-4 h-4" />
+            Resume
+          </button>
+          <button
+            onClick={() => {
+              if (confirm('Are you sure you want to stop the bot?')) {
+                sendBotCommand('stop', 'Manual stop via dashboard');
+              }
+            }}
+            disabled={controlLoading}
+            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-slate-700 disabled:text-slate-500 rounded text-white font-semibold flex items-center gap-2"
+          >
+            <XCircle className="w-4 h-4" />
+            Stop Bot
+          </button>
+          <button
+            onClick={() => {
+              if (confirm('⚠️ EMERGENCY STOP - This will immediately halt all bot operations. Continue?')) {
+                sendBotCommand('emergency_stop', 'Emergency stop via dashboard');
+              }
+            }}
+            disabled={controlLoading}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-slate-700 disabled:text-slate-500 rounded text-white font-semibold flex items-center gap-2"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            EMERGENCY STOP
+          </button>
+        </div>
+      </div>
+
+      {/* Circuit Breakers Alert */}
+      {stats && stats.circuitBreakers && stats.circuitBreakers.length > 0 && (
+        <div className="bg-red-900/20 border border-red-500 rounded-lg p-4 mb-6">
           <div className="flex items-center gap-2 mb-2">
             <AlertCircle className="w-5 h-5 text-red-400" />
             <h3 className="text-red-400 font-semibold">Active Circuit Breakers</h3>
@@ -174,65 +255,145 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Stats Cards */}
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-slate-900 rounded-lg p-6 border border-slate-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-slate-400 text-sm mb-2">Total P&L</p>
+                <p className={`text-3xl font-bold ${stats.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  ${stats.totalPnL.toFixed(2)}
+                </p>
+              </div>
+              {stats.totalPnL >= 0 ? (
+                <TrendingUp className="w-8 h-8 text-green-400" />
+              ) : (
+                <TrendingDown className="w-8 h-8 text-red-400" />
+              )}
+            </div>
+          </div>
+
+          <div className="bg-slate-900 rounded-lg p-6 border border-slate-800">
+            <div>
+              <p className="text-slate-400 text-sm mb-2">Win Rate</p>
+              <p className={`text-3xl font-bold ${stats.winRate >= 80 ? 'text-green-400' : stats.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                {stats.winRate.toFixed(1)}%
+              </p>
+              <p className="text-slate-500 text-xs mt-1">{stats.totalTrades} trades</p>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 rounded-lg p-6 border border-slate-800">
+            <div>
+              <p className="text-slate-400 text-sm mb-2">Open Positions</p>
+              <p className="text-3xl font-bold text-blue-400">{stats.openPositions}</p>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 rounded-lg p-6 border border-slate-800">
+            <div>
+              <p className="text-slate-400 text-sm mb-2">USDC Balance</p>
+              <p className="text-3xl font-bold text-purple-400">${stats.usdcBalance.toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Safe Markets */}
+      {botStatus && botStatus.safeMarkets.length > 0 && (
+        <div className="bg-green-900/20 border border-green-500 rounded-lg p-6 mb-6">
+          <h2 className="text-xl font-bold text-green-400 mb-4 flex items-center gap-2">
+            <Target className="w-5 h-5" />
+            Safe Markets - Active Trading
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {botStatus.safeMarkets.map((market, i) => (
+              <div key={i} className="bg-slate-900 rounded-lg p-4 border border-green-500">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="text-white font-bold">{market.city}</p>
+                    <p className={`text-sm font-semibold ${market.side === 'YES' ? 'text-green-400' : 'text-red-400'}`}>
+                      {market.side}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-green-400 font-bold text-lg">{market.safetyScore}</p>
+                    <p className="text-xs text-slate-400">safety score</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="text-slate-400">Expected Profit</p>
+                    <p className="text-green-400 font-semibold">{market.expectedProfit.toFixed(2)}%</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Price</p>
+                    <p className="text-white font-semibold">${market.currentPrice.toFixed(4)}</p>
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+                  <Clock className="w-3 h-3" />
+                  Orderbook fetching active
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 bg-slate-800 rounded p-3">
+            <p className="text-sm text-slate-300">
+              <span className="font-semibold text-green-400">{botStatus.activeOrderbookFetchers}</span> aggressive orderbook fetchers active •
+              Checking every 2-5 seconds for opportunities
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        {/* Recent Positions */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Action Logs */}
         <div className="bg-slate-900 rounded-lg p-6 border border-slate-800">
           <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
             <Activity className="w-5 h-5" />
-            Open Positions
+            Action Logs (Last 50)
           </h2>
-          <div className="space-y-3 max-h-64 overflow-y-auto">
-            {positions.length === 0 ? (
-              <p className="text-slate-400 text-sm">No open positions</p>
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {actionLogs.length === 0 ? (
+              <p className="text-slate-400 text-sm">No action logs yet</p>
             ) : (
-              positions.map((pos) => (
-                <div key={pos.marketId} className="bg-slate-800 rounded p-3 border border-slate-700">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <p className="text-white font-semibold text-sm">{pos.marketId}</p>
-                      <p className={`text-xs ${pos.side === 'YES' ? 'text-green-400' : 'text-red-400'}`}>
-                        {pos.side} • {pos.shares} shares
-                      </p>
-                    </div>
-                    <p className="text-white font-semibold">${pos.totalCost.toFixed(2)}</p>
+              actionLogs.map((log, i) => (
+                <div key={i} className="bg-slate-800 rounded p-3 border border-slate-700 text-sm">
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="font-semibold text-blue-400">{log.action}</span>
+                    <span className="text-slate-500 text-xs">
+                      {new Date(log.timestamp).toLocaleTimeString()}
+                    </span>
                   </div>
-                  <p className="text-slate-400 text-xs">Entry: ${pos.buyPrice.toFixed(4)}</p>
+                  <p className="text-slate-300">{log.message}</p>
                 </div>
               ))
             )}
           </div>
         </div>
 
-        {/* Recent Decisions */}
+        {/* Error Logs */}
         <div className="bg-slate-900 rounded-lg p-6 border border-slate-800">
           <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-            <Zap className="w-5 h-5" />
-            Recent Decisions
+            <AlertCircle className="w-5 h-5 text-red-400" />
+            Error Logs (Last 20)
           </h2>
-          <div className="space-y-3 max-h-64 overflow-y-auto">
-            {decisions.length === 0 ? (
-              <p className="text-slate-400 text-sm">No recent decisions</p>
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {errorLogs.length === 0 ? (
+              <p className="text-slate-400 text-sm">No errors - System healthy!</p>
             ) : (
-              decisions.slice(0, 10).map((dec, i) => (
-                <div key={i} className="bg-slate-800 rounded p-3 border border-slate-700">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <p className="text-white font-semibold text-sm">{dec.marketId}</p>
-                      <p className={`text-xs font-semibold ${
-                        dec.decision === 'BUY' ? 'text-green-400' : 'text-slate-400'
-                      }`}>
-                        {dec.decision}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-blue-400 text-sm font-semibold">{dec.safetyScore}</p>
-                      <p className="text-green-400 text-xs">{dec.profitMargin.toFixed(2)}%</p>
-                    </div>
+              errorLogs.map((log, i) => (
+                <div key={i} className="bg-red-900/20 rounded p-3 border border-red-800 text-sm">
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="font-semibold text-red-400">{log.errorType}</span>
+                    <span className="text-slate-500 text-xs">
+                      {new Date(log.timestamp).toLocaleTimeString()}
+                    </span>
                   </div>
-                  <p className="text-slate-500 text-xs">
-                    {new Date(dec.timestamp).toLocaleTimeString()}
-                  </p>
+                  <p className="text-red-300">{log.message}</p>
                 </div>
               ))
             )}
@@ -240,64 +401,40 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* P&L Chart */}
-        <div className="bg-slate-900 rounded-lg p-6 border border-slate-800">
-          <h2 className="text-xl font-bold text-white mb-4">P&L Trend</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart
-              data={[
-                { name: 'Today', pnl: stats.totalPnL },
-                { name: 'Week', pnl: stats.totalPnL * 1.2 },
-                { name: 'Month', pnl: stats.totalPnL * 1.5 },
-              ]}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-              <XAxis stroke="#94a3b8" />
-              <YAxis stroke="#94a3b8" />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
-                labelStyle={{ color: '#e2e8f0' }}
-              />
-              <Line type="monotone" dataKey="pnl" stroke="#10b981" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Trade Metrics */}
-        <div className="bg-slate-900 rounded-lg p-6 border border-slate-800">
-          <h2 className="text-xl font-bold text-white mb-4">Trade Distribution</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={[
-                  { name: 'Win', value: Math.round(stats.totalTrades * (stats.winRate / 100)) },
-                  { name: 'Loss', value: Math.round(stats.totalTrades * ((100 - stats.winRate) / 100)) },
-                ]}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={100}
-                dataKey="value"
-              >
-                <Cell fill="#10b981" />
-                <Cell fill="#ef4444" />
-              </Pie>
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
-                labelStyle={{ color: '#e2e8f0' }}
-              />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
+      {/* Open Positions */}
+      <div className="bg-slate-900 rounded-lg p-6 border border-slate-800 mb-6">
+        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+          <DollarSign className="w-5 h-5" />
+          Open Positions
+        </h2>
+        <div className="space-y-3">
+          {positions.length === 0 ? (
+            <p className="text-slate-400 text-sm">No open positions</p>
+          ) : (
+            positions.map((pos, i) => (
+              <div key={i} className="bg-slate-800 rounded p-4 border border-slate-700">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-white font-semibold">{pos.marketId}</p>
+                    <p className={`text-sm ${pos.side === 'YES' ? 'text-green-400' : 'text-red-400'}`}>
+                      {pos.side} • {pos.shares.toFixed(2)} shares @ ${pos.buyPrice.toFixed(4)}
+                    </p>
+                  </div>
+                  <p className="text-white font-bold text-lg">${pos.totalCost.toFixed(2)}</p>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
       {/* Footer */}
-      <div className="mt-8 pt-4 border-t border-slate-800">
+      <div className="pt-4 border-t border-slate-800">
         <p className="text-slate-500 text-sm text-center">
-          Dashboard last updated: {new Date().toLocaleTimeString()} • Auto-refresh enabled
+          Dashboard V2 • Auto-refresh every 5s • Last updated: {new Date().toLocaleTimeString()}
+        </p>
+        <p className="text-slate-600 text-xs text-center mt-1">
+          Focused on London & New York markets • All-in liquidity strategy • Competitive mode
         </p>
       </div>
     </div>

@@ -3,21 +3,25 @@ import { ENV } from './config/env';
 import { ethers } from 'ethers';
 import { ClobClient } from '@polymarket/clob-client';
 import { SignatureType } from '@polymarket/order-utils';
-import { initializeBot, runBotLoop, stopBot } from './services/botOrchestrator';
+import { initializeBotV2, runSafeMarketDetectionLoop, stopBot } from './services/botOrchestratorV2';
 import { initializeLogger, logInfo } from './services/logger';
 
 /**
- * Weather Prediction Market Arbitrage Bot
+ * Weather Prediction Market Arbitrage Bot V2 - Competitive Trading Mode
  *
  * This bot identifies and executes near-certain arbitrage opportunities
- * in Polymarket weather prediction markets.
+ * in Polymarket weather prediction markets with aggressive competitive strategies.
  *
- * Key features:
- * - Real-time weather data integration
- * - Safety scoring algorithm (0-100 scale)
+ * V2 Key Features:
+ * - 60-second safe market detection loop
+ * - Aggressive orderbook fetching for safe markets (2-5 second intervals)
+ * - All-in liquidity allocation strategy
+ * - Focus on London & New York markets only (today + tomorrow)
+ * - Auto day rotation (cleanup n-1, focus on n and n+1)
+ * - Real-time action and error logging
+ * - Enhanced dashboard with full bot controls
  * - Multiple circuit breakers for risk management
  * - Paper trading mode for validation
- * - Comprehensive logging and audit trail
  */
 
 const main = async () => {
@@ -90,24 +94,27 @@ const main = async () => {
         let usdcBalance = 0; // In production, fetch from blockchain
         console.log(`💰 USDC Balance: $${usdcBalance.toFixed(2)}`);
 
-        // Initialize bot
-        await initializeBot(clobClient);
+        // Initialize bot V2
+        await initializeBotV2(clobClient);
 
-        // Main trading loop
-        console.log(`\n⏱️  Starting main trading loop (${ENV.MAIN_LOOP_INTERVAL}ms interval)`);
+        // Main V2 trading loop - 60 second safe market detection
+        console.log(`\n⏱️  Starting V2 safe market detection loop (60s interval)`);
+        console.log(`🎯 Focus: London & New York markets only`);
         console.log(`📊 Paper trading mode: ${ENV.PAPER_TRADING_MODE}`);
         console.log(`🔒 Min safety score: ${ENV.MIN_SAFETY_SCORE}`);
         console.log(`📈 Min profit margin: ${ENV.MIN_PROFIT_MARGIN_PERCENT}%`);
+        console.log(`💰 Liquidity strategy: All-in on safe markets`);
+        console.log(`⚡ Orderbook fetching: Aggressive (2-5 seconds for safe markets)`);
 
         const loopInterval = setInterval(async () => {
             try {
                 // Update balance (in production, fetch from blockchain)
-                await runBotLoop(clobClient, usdcBalance);
+                await runSafeMarketDetectionLoop(clobClient, usdcBalance);
             } catch (error) {
                 console.error('❌ Error in trading loop:', error);
                 logInfo('Trading loop error', { error: String(error) });
             }
-        }, ENV.MAIN_LOOP_INTERVAL);
+        }, 60000); // 60 seconds
 
         // Graceful shutdown
         process.on('SIGINT', async () => {
